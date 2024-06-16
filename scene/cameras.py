@@ -91,11 +91,10 @@ class Camera(nn.Module):
         ).squeeze(0)
         self.camera_center = self.world_view_transform[3, :3]
 
-    def from_vtk(self, wvt, proj, pos):
+    def from_vtk(self, wvt, proj):
         self.world_view_transform = torch.tensor(wvt).transpose(0, 1).cuda()
-        self.projection_matrix = torch.tensor(proj).transpose(0, 1).cuda()
         self.full_proj_transform = torch.tensor(proj).transpose(0, 1).cuda()
-        self.camera_center = torch.tensor(pos).cuda()
+        self.camera_center = self.world_view_transform[3, :3]
 
 
 class MiniCam:
