@@ -65,8 +65,8 @@ class Camera(nn.Module):
                 (1, self.image_height, self.image_width), device=self.data_device
             )
 
-        self.zfar = 1000.01
-        self.znear = 0.01
+        self.zfar = 1000.0
+        self.znear = 0.001
 
         self.trans = trans
         self.scale = scale
@@ -76,10 +76,12 @@ class Camera(nn.Module):
         )
         self.projection_matrix = (
             getProjectionMatrix(
-                fovy=self.FoVy,
-                aspect=(800 / 600),
-                zNear=self.znear,
-                zFar=self.zfar,
+                znear=self.znear,
+                zfar=self.zfar,
+                fovX=self.FoVx,
+                fovY=self.FoVy,
+                cx=self.cx,
+                cy=self.cy,
             )
             .transpose(0, 1)
             .cuda()
@@ -89,7 +91,7 @@ class Camera(nn.Module):
                 self.projection_matrix.unsqueeze(0)
             )
         ).squeeze(0)
-        self.camera_center = self.world_view_transform[3, :3]
+        self.camera_center = self.world_view_transform.inverse()[3, :3]
 
     def from_vtk(self, wvt, proj):
         self.world_view_transform = torch.tensor(wvt).transpose(0, 1).cuda()

@@ -1,14 +1,15 @@
-name: gaussian_splatting                                                                    
-channels:                                                                                   
-  - pytorch                                                                                 
-  - conda-forge       
-  - defaults
+name: gaussian_splatting
+channels:
+  - pytorch
   - nvidia
+  - conda-forge
+  - defaults
 dependencies:
   - cuda-toolkit=12.1
   - plyfile
   - python
   - pip
+  - pytorch
   - pytorch-cuda=12.1
   - torchmetrics
   - torchvision

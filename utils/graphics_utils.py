@@ -53,39 +53,27 @@ def getWorld2View2(R, t, translate=np.array([0.0, 0.0, 0.0]), scale=1.0):
     return np.float32(Rt)
 
 
-def getProjectionMatrix(fovy, aspect, zNear, zFar):
-    tanHalfFovy = math.tan((fovy / 2.0))
+def getProjectionMatrix(znear, zfar, fovX, fovY, cx, cy):
+    tanHalfFovY = math.tan((fovY / 2))
+    tanHalfFovX = math.tan((fovX / 2))
 
-    p_matrix = torch.zeros(4, 4)
-    p_matrix[0, 0] = 1.0 / (aspect * tanHalfFovy)
-    p_matrix[1, 1] = 1.0 / tanHalfFovy
-    p_matrix[2, 2] = (zFar + zNear) / (zFar - zNear)
-    p_matrix[2, 3] = 1.0
-    p_matrix[3, 2] = -(2.0 * zFar * zNear) / (zFar - zNear)
-    return p_matrix
+    top = tanHalfFovY * znear
+    bottom = -top
+    right = tanHalfFovX * znear
+    left = -right
 
+    P = torch.zeros(4, 4)
 
-# def getProjectionMatrix(znear, zfar, fovX, fovY, cx, cy):
-#     tanHalfFovY = math.tan((fovY / 2))
-#     tanHalfFovX = math.tan((fovX / 2))
+    z_sign = 1.0
 
-#     top = tanHalfFovY * znear
-#     bottom = -top
-#     right = tanHalfFovX * znear
-#     left = -right
-
-#     P = torch.zeros(4, 4)
-
-#     z_sign = 1.0
-
-#     P[0, 0] = 2.0 * znear / (right - left)
-#     P[1, 1] = 2.0 * znear / (top - bottom)
-#     P[0, 2] = cx
-#     P[1, 2] = cy
-#     P[3, 2] = z_sign
-#     P[2, 2] = z_sign * zfar / (zfar - znear)
-#     P[2, 3] = -(zfar * znear) / (zfar - znear)
-#     return P
+    P[0, 0] = 2.0 * znear / (right - left)
+    P[1, 1] = 2.0 * znear / (top - bottom)
+    P[0, 2] = cx
+    P[1, 2] = cy
+    P[3, 2] = z_sign
+    P[2, 2] = z_sign * zfar / (zfar - znear)
+    P[2, 3] = -(zfar * znear) / (zfar - znear)
+    return P
 
 
 def fov2focal(fov, pixels):

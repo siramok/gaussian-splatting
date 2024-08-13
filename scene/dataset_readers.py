@@ -11,7 +11,7 @@
 
 import os
 import sys
-from PIL import Image
+from PIL import Image, ImageDraw
 from typing import NamedTuple
 from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
     read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary, read_points3D_text
@@ -22,6 +22,13 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+
+import pyvista as pv
+import matplotlib.pyplot as plt
+from vtk import vtkMatrix4x4, vtkMatrix3x3
+from utils.general_utils import PILtoTorch
+import shutil
+import pandas as pd
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -36,6 +43,10 @@ class CameraInfo(NamedTuple):
     image_name: str
     width: int
     height: int
+    mvt_matrix: np.array
+    proj_matrix: np.array
+    center: np.array
+
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -59,6 +70,7 @@ def getNerfppNorm(cam_info):
         W2C = getWorld2View2(cam.R, cam.T)
         C2W = np.linalg.inv(W2C)
         cam_centers.append(C2W[:3, 3:4])
+        
 
     center, diagonal = get_center_and_diag(cam_centers)
     radius = diagonal * 1.1
@@ -110,7 +122,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         image_fs.close()
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, cx=cx, cy=cy, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height)
+                              image_path=image_path, image_name=image_name, width=width, height=height, mvt_matrix=np.array([]), proj_matrix=np.array([]))
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
     return cam_infos
@@ -120,7 +132,10 @@ def fetchPly(path):
     vertices = plydata['vertex']
     positions = np.vstack([vertices['x'], vertices['y'], vertices['z']]).T
     colors = np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0
-    normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
+    if 'nx' in vertices:
+        normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
+    else:
+        normals = np.zeros(positions.shape)
     return BasicPointCloud(points=positions, colors=colors, normals=normals)
 
 def storePly(path, xyz, rgb):
@@ -179,7 +194,9 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         pcd = fetchPly(ply_path)
     except:
         pcd = None
-
+    print(f"train_cam_infos = {len(train_cam_infos)}")
+    print(f"test_cam_infos = {len(test_cam_infos)}")
+    print(f"nerf_normalization = {nerf_normalization}")
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
@@ -268,7 +285,285 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            ply_path=ply_path)
     return scene_info
 
+# Just used for getting the VTK matrices into a ndarray
+def arrayFromVTKMatrix(vmatrix):
+    if isinstance(vmatrix, vtkMatrix4x4):
+        matrixSize = 4
+    elif isinstance(vmatrix, vtkMatrix3x3):
+        matrixSize = 3
+    else:
+        raise RuntimeError("Input must be vtk.vtkMatrix3x3 or vtk.vtkMatrix4x4")
+    narray = np.eye(matrixSize)
+    vmatrix.DeepCopy(narray.ravel(), vmatrix)
+    return narray.astype(np.float32)
+
+def readVolumeCameras(path):
+    image_dir = os.path.join(path, "images")
+    if os.path.exists(image_dir):
+        shutil.rmtree(image_dir)
+    os.makedirs(image_dir)
+    
+
+    width = 1600
+    height = 1063
+    ratio = width / height
+
+    pl = pv.Plotter(off_screen=True)
+    pl.window_size = [width, height]
+
+    mesh = pv.read(os.path.join(path, "data.ply"))
+    min_vals = np.min(mesh.points, axis=0)
+    max_vals = np.max(mesh.points, axis=0)
+    mesh.points = (mesh.points - min_vals) / (max_vals - min_vals)
+    # epsilon = 0.01  # A small value to shrink the range slightly
+
+    # Step 4: Scale the normalized values to the range of -1 + epsilon to 1 - epsilon
+    # scale_factor = (1 - epsilon) - (-1 + epsilon)
+    # mesh.points = mesh.points * scale_factor + (-1 + epsilon)
+    pl.add_mesh(mesh, show_scalar_bar=False, cmap=plt.cm.coolwarm_r)
+    # pl.add_mesh(mesh, show_scalar_bar=False, cmap=plt.cm.inferno)
+    # pl.add_mesh(mesh, show_scalar_bar=False)
+    offset = list(pl.camera.focal_point)
+    # offset[0] -= 3
+    # offset[1] -= 5
+    offset[2] -= 5
+    # for i, _ in enumerate(mesh.points):
+    #     mesh.points[i] = mesh.points[i] - offset
+    mesh.points[:] = mesh.points - offset
+
+    pl.view_xy()
+    camera = pl.camera
+    # position = list(camera.position)
+    # position[0] *= 1.5
+    # position[1] *= 1.5
+    # position[2] -= 15
+    # print(camera)
+
+    cx = 0
+    cy = 0
+    
+    cam_infos = []
+
+    azimuth_steps = 36
+    elevation_steps = 7
+    azimuth_range = range(0, 360, 360 // azimuth_steps)
+    elevation_range = range(-35, 35, 70 // elevation_steps)
+
+    image_counter = 0
+
+    for elevation in elevation_range:
+        for azimuth in azimuth_range:
+            camera.elevation = elevation
+            camera.azimuth = azimuth
+
+            pl.render()
+            x, y, z = camera.position
+            image_name = f"img_{image_counter:05d}_azi_{azimuth}_ele_{elevation}_x_{round(x, 8)}_y_{round(y, 8)}_z_{round(z, 8)}.png"
+            image_path = os.path.join(f"{image_dir}", image_name)
+            image = Image.fromarray(pl.screenshot(image_path, return_img=True))
+
+            mvt_matrix = np.linalg.inv(arrayFromVTKMatrix(camera.GetModelViewTransformMatrix()))
+            mvt_matrix[:3, 1:3] *= -1
+
+            R = mvt_matrix[:3, :3].T
+            T = mvt_matrix[:3, 3]
+
+            FovY = np.radians(camera.view_angle)
+            FovX = focal2fov(fov2focal(FovY, height), width)
+
+            proj_matrix = arrayFromVTKMatrix(
+                camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
+            )
+
+            proj_matrix[1, :] = -proj_matrix[1, :]
+            proj_matrix[2, :] = -proj_matrix[2, :]
+
+            if y < 0:
+                mvt_matrix[2, 1] *= -1
+            mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+
+            center = mvt_matrix[:3, 3]
+            # print(f"id = {image_counter}, azimuth = {azimuth}, elevation = {elevation}, mvt_matrix = {mvt_matrix}, proj_matrix = {proj_matrix}, position = {camera.position}, center = {center}")
+        
+            cam_info = CameraInfo(uid=image_counter, R=R, T=T, FovY=FovY, FovX=FovX, cx=cx, cy=cy, image=image, image_path=image_path, image_name=image_name, width=width, height=height, mvt_matrix=mvt_matrix, proj_matrix=proj_matrix, center=center)
+            cam_infos.append(cam_info)
+
+            image_counter += 1
+        
+    pl.close()
+    sys.stdout.write('\n')
+    return cam_infos, offset, min_vals, max_vals
+
+def getVolumeppNorm(cam_info):
+    def get_center_and_diag(cam_centers):
+        cam_centers = np.hstack(cam_centers)
+        avg_cam_center = np.mean(cam_centers, axis=1, keepdims=True)
+        center = avg_cam_center
+        dist = np.linalg.norm(cam_centers - center, axis=0, keepdims=True)
+        diagonal = np.max(dist)
+        return center.flatten(), diagonal
+
+    cam_centers = []
+
+    for cam in cam_info:
+        center = cam.center
+        cam_centers.append(np.array([[center[0]], [center[1]], [center[2]]]))
+
+    center, diagonal = get_center_and_diag(cam_centers)
+    radius = diagonal * 1.1
+
+    translate = -center
+
+    return {"translate": translate, "radius": radius}
+
+def readVolumeSceneInfo(path, eval, llffhold=8):
+    cam_infos, offset, min_vals, max_vals = readVolumeCameras(path)
+
+    if eval:
+        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+        test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
+    else:
+        train_cam_infos = cam_infos
+        test_cam_infos = []
+
+    nerf_normalization = getVolumeppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "data.ply")
+    pcd = fetchPly(ply_path)
+    for i, _ in enumerate(pcd.points):
+        pcd.points[i] = ((pcd.points[i] - min_vals) / (max_vals - min_vals)) - offset
+
+    # double_points = np.concatenate((pcd.points, pcd.points), axis=0)
+    # double_colors = np.concatenate((pcd.colors, pcd.colors), axis=0)
+    # double_normals = np.concatenate((pcd.normals, pcd.normals), axis=0)
+    # pcd = BasicPointCloud(double_points, double_colors, double_normals)
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+    return scene_info
+
+def change_color_to_white(img, target_color):
+    img = img.convert("RGBA")
+    data = img.getdata()
+    new_data = []
+    for item in data:
+        # Change all pixels that match the target color to white
+        if item[:3] == target_color[:3]:  # Ignore alpha channel if present
+            new_data.append((255, 255, 255, item[3]) if len(item) == 4 else (255, 255, 255))
+        else:
+            new_data.append(item)
+    img.putdata(new_data)
+    draw = ImageDraw.Draw(img)
+    width, height = img.size
+    # Define the region for the legend (adjust these coordinates as necessary)
+    legend_area = (width - 120, height - 400, width, height)
+    draw.rectangle(legend_area, fill=(255, 255, 255))
+    return img
+
+def readCinemaCameras(path):
+    csv_path = os.path.join(path, "data.csv")
+    df = pd.read_csv(csv_path)
+    df = df.loc[df["time"] == 0.0]
+    df = df.loc[df["opacity_transfer_function"] == 1]
+    # df = df[((df['theta'] >= 0) & (df['theta'] <= 35)) | ((df['theta'] >= 325) & (df['theta'] <= 360))]
+    # df = df[df['theta'] != 0]
+    df = df[((df['theta'] >= -35.0) & (df['theta'] <= 35.0)) | ((df['theta'] >= 325.0) & (df['theta'] <= 360.0))]
+    # df = df.loc[df["theta"] == 0.0]
+    # print(df)
+
+    with Image.open(os.path.join(path, df["FILE_png"].iloc[0])) as img:
+        width, height = img.size
+        bg_color = img.getpixel((0, 0))
+    ratio = width / height
+    pl = pv.Plotter(off_screen=True)
+    pl.window_size = [width, height]
+    mesh = pv.read(os.path.join(path, "data.ply"))
+    pl.add_mesh(mesh, show_scalar_bar=False, cmap=plt.cm.coolwarm_r)
+    pl.view_xy()
+    camera = pl.camera
+    # camera.position = [0.0, 0.0, 6.346065214951231]
+    # camera.focal_point = [0.0, 0.0, 5.0]
+
+    FovY = np.radians(camera.view_angle)
+    FovX = focal2fov(fov2focal(FovY, height), width)
+
+    cx = 0
+    cy = 0
+    
+    cam_infos = []
+    image_counter = 0
+
+    for _, row in df.iterrows():
+        camera.elevation = row["theta"]
+        camera.azimuth = row["phi"]
+        y = camera.position[1]
+
+        image_name = row["FILE_png"]
+        image_path = os.path.join(path, image_name)
+        image = Image.open(image_path)
+        if bg_color != (255, 255, 255):
+            image = change_color_to_white(image, bg_color)
+
+        mvt_matrix = np.linalg.inv(arrayFromVTKMatrix(camera.GetModelViewTransformMatrix()))
+        mvt_matrix[:3, 1:3] *= -1
+
+        R = mvt_matrix[:3, :3].T
+        T = mvt_matrix[:3, 3]
+
+        proj_matrix = arrayFromVTKMatrix(
+            camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
+        )
+
+        proj_matrix[1, :] = -proj_matrix[1, :]
+        proj_matrix[2, :] = -proj_matrix[2, :]
+
+        if y < 0:
+            mvt_matrix[2, 1] *= -1
+        mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+
+        center = mvt_matrix[:3, 3]
+
+        cam_info = CameraInfo(uid=image_counter, R=R, T=T, FovY=FovY, FovX=FovX, cx=cx, cy=cy, image=image, image_path=image_path, image_name=image_name, width=width, height=height, mvt_matrix=mvt_matrix, proj_matrix=proj_matrix, center=center)
+        cam_infos.append(cam_info)
+
+        image_counter += 1
+
+    return cam_infos
+
+def readCinemaSceneInfo(path, eval, llffhold=8):
+    ply_path = os.path.join(path, "data.ply")
+    num_pts = 500_000
+    xyz = np.random.random((num_pts, 3)) * 2 - 1
+    xyz[:, 2] -= 4
+    shs = np.random.random((num_pts, 3)) / 255.0
+    pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+    storePly(ply_path, xyz, SH2RGB(shs) * 255)
+
+    cam_infos = readCinemaCameras(path)
+
+    if eval:
+        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+        test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
+    else:
+        train_cam_infos = cam_infos
+        test_cam_infos = []
+
+    nerf_normalization = getVolumeppNorm(train_cam_infos)
+
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           ply_path=ply_path)
+    return scene_info
+
+
 sceneLoadTypeCallbacks = {
+    "Cinema": readCinemaSceneInfo,
+    "Volume": readVolumeSceneInfo,
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo
 }
