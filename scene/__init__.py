@@ -66,7 +66,6 @@ class Scene:
             )
         elif os.path.exists(os.path.join(args.source_path, "data.ply")):
             direct = True
-            args.white_background = True
             scene_info = sceneLoadTypeCallbacks["Direct"](args.source_path, args.eval)
         else:
             assert False, "Could not recognize scene type!"

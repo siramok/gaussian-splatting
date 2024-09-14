@@ -83,6 +83,8 @@ def render(
         scales = pc.get_scaling
         rotations = pc.get_rotation
 
+    values = pc.get_values
+
     # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
     # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
     shs = None
@@ -112,6 +114,7 @@ def render(
         opacities=opacity,
         scales=scales,
         rotations=rotations,
+        values=values,
         cov3D_precomp=cov3D_precomp,
     )
 

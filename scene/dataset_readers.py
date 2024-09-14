@@ -166,10 +166,13 @@ def fetchPly(path):
     positions = np.vstack([vertices["x"], vertices["y"], vertices["z"]]).T
     colors = np.vstack([vertices["red"], vertices["green"], vertices["blue"]]).T / 255.0
     normals = np.vstack([vertices["nx"], vertices["ny"], vertices["nz"]]).T
-    return BasicPointCloud(points=positions, colors=colors, normals=normals)
+    values = np.vstack(vertices["value"]).T
+    return BasicPointCloud(
+        points=positions, colors=colors, normals=normals, values=values
+    )
 
 
-def storePly(path, xyz, rgb):
+def storePly(path, xyz, rgb, values):
     # Define the dtype for the structured array
     dtype = [
         ("x", "f4"),
@@ -181,12 +184,13 @@ def storePly(path, xyz, rgb):
         ("red", "u1"),
         ("green", "u1"),
         ("blue", "u1"),
+        ("value", "f4"),
     ]
 
     normals = np.zeros_like(xyz)
 
     elements = np.empty(xyz.shape[0], dtype=dtype)
-    attributes = np.concatenate((xyz, normals, rgb), axis=1)
+    attributes = np.concatenate((xyz, normals, rgb, values), axis=1)
     elements[:] = list(map(tuple, attributes))
 
     # Create the PlyData object and write to file
@@ -426,8 +430,9 @@ def readDirectCameras(path):
     pl.window_size = [width, height]
 
     # TODO: if the input.ply already exists, just load it directly
-    # mesh = pv.read(os.path.join(path, "data.vtu"))
-    mesh = pv.read(os.path.join(path, "data.ply"))
+    mesh = pv.read(os.path.join(path, "data.vtu"))
+    values = mesh.get_array("value").reshape(-1, 1)
+    # mesh = pv.read(os.path.join(path, "data.ply"))
     min_vals = np.min(mesh.points, axis=0)
     max_vals = np.max(mesh.points, axis=0)
     max_abs_val = max(np.max(np.abs(min_vals)), np.max(np.abs(max_vals)))
@@ -435,16 +440,28 @@ def readDirectCameras(path):
     if max_abs_val > 1:
         scale_factor = -1.0 / max_abs_val
         mesh.scale(scale_factor, inplace=True)
-    # pl.add_mesh(mesh, show_scalar_bar=False, scalars="value", cmap=plt.cm.viridis)
-    pl.add_mesh(mesh, show_scalar_bar=False, rgb="RGB")
+    # print(mesh)
+    opacity = [1, 1, 1, 1, 1, 1]
+    pl.add_volume(mesh, show_scalar_bar=False, scalars="value", opacity=opacity)
+    # pl.add_mesh(mesh, show_scalar_bar=False, scalars="value")
+    # pl.add_mesh(mesh, show_scalar_bar=False, rgb="RGB")
     offset = list(pl.camera.focal_point)
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
     # Save the scaled and translated .ply
-    storePly(os.path.join(path, "input.ply"), mesh.points, mesh.get_array("RGB"))
+    random_colors = SH2RGB(np.random.random((len(mesh.points), 3)) / 255.0) * 255
 
+    storePly(
+        os.path.join(path, "input.ply"),
+        mesh.points,
+        random_colors,
+        values,
+    )
+    # storePly(os.path.join(path, "input.ply"), mesh.points, mesh.get_array("RGB"))
+
+    pl.background_color = "black"
     pl.view_xy()
     pl.camera.clipping_range = (0.001, 1000.0)
     camera = pl.camera
