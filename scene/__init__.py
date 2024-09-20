@@ -64,7 +64,7 @@ class Scene:
             scene_info = sceneLoadTypeCallbacks["Blender"](
                 args.source_path, args.white_background, args.eval
             )
-        elif os.path.exists(os.path.join(args.source_path, "data.ply")):
+        elif os.path.exists(os.path.join(args.source_path, "data.vtu")):
             direct = True
             scene_info = sceneLoadTypeCallbacks["Direct"](args.source_path, args.eval)
         else:
