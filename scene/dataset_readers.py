@@ -29,6 +29,7 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+from matplotlib.colors import LinearSegmentedColormap
 
 import pyvista as pv
 import shutil
@@ -420,8 +421,8 @@ def readDirectCameras(path):
         shutil.rmtree(image_dir)
     os.makedirs(image_dir)
 
-    width = 2560
-    height = 1440
+    width = 800
+    height = 800
     ratio = width / height
 
     # Prepare pyvista window
@@ -432,6 +433,13 @@ def readDirectCameras(path):
     # TODO: if the input.ply already exists, just load it directly
     mesh = pv.read(os.path.join(path, "data.vtu"))
     values = mesh.get_array("value").reshape(-1, 1)
+
+    # Rescale the values to the range [0, 1]
+    min_val = values.min()
+    max_val = values.max()
+    values = (values - min_val) / (max_val - min_val)
+    mesh.get_array("value")[:] = values.ravel()
+
     # mesh = pv.read(os.path.join(path, "data.ply"))
     min_vals = np.min(mesh.points, axis=0)
     max_vals = np.max(mesh.points, axis=0)
@@ -441,8 +449,16 @@ def readDirectCameras(path):
         scale_factor = -1.0 / max_abs_val
         mesh.scale(scale_factor, inplace=True)
     # print(mesh)
-    opacity = [1, 1, 1, 1, 1, 1]
-    pl.add_volume(mesh, show_scalar_bar=False, scalars="value", opacity=opacity)
+    colormap = LinearSegmentedColormap.from_list("CustomColormap", [
+        (1.0, 0.0, 0.0),  # Red
+        (1.0, 1.0, 0.0),  # Yellow
+        (0.0, 1.0, 0.0),  # Green
+        (0.0, 1.0, 1.0),  # Cyan
+        (0.0, 0.0, 1.0),  # Blue
+        (1.0, 0.0, 1.0)   # Pink
+    ])
+
+    pl.add_volume(mesh, show_scalar_bar=False, scalars="value", cmap=colormap, opacity=np.ones((256,)) * 50)
     # pl.add_mesh(mesh, show_scalar_bar=False, scalars="value")
     # pl.add_mesh(mesh, show_scalar_bar=False, rgb="RGB")
     offset = list(pl.camera.focal_point)
@@ -457,7 +473,8 @@ def readDirectCameras(path):
         os.path.join(path, "input.ply"),
         mesh.points,
         random_colors,
-        values,
+        # np.random.rand(*values.shape),
+        values
     )
     # storePly(os.path.join(path, "input.ply"), mesh.points, mesh.get_array("RGB"))
 
