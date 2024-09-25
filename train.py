@@ -160,14 +160,15 @@ def training(
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_Ll1depth_for_log = 0.4 * Ll1depth + 0.6 * ema_Ll1depth_for_log
 
-            if iteration % 10 == 0:
+            if iteration % 500 == 0:
                 progress_bar.set_postfix(
                     {
                         "Loss": f"{ema_loss_for_log:.{7}f}",
                         "Depth Loss": f"{ema_Ll1depth_for_log:.{7}f}",
                     }
                 )
-                progress_bar.update(10)
+                progress_bar.update(500)
+                print("")
             if iteration == opt.iterations:
                 progress_bar.close()
 
@@ -360,7 +361,7 @@ if __name__ == "__main__":
         "--test_iterations", nargs="+", type=int, default=[7_000, 30_000]
     )
     parser.add_argument(
-        "--save_iterations", nargs="+", type=int, default=[7_000, 30_000]
+        "--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000]
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=False)
