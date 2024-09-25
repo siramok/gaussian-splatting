@@ -14,7 +14,9 @@ import os
 from PIL import Image
 import torch
 import torchvision.transforms.functional as tf
-from utils.loss_utils import ssim
+import torchvision
+from utils.loss_utils import ssim, l1_loss
+from utils.ms_ssim import ms_ssim
 from lpipsPyTorch import lpips
 import json
 from tqdm import tqdm
@@ -42,7 +44,7 @@ def evaluate(model_paths):
     full_dict_polytopeonly = {}
     per_view_dict_polytopeonly = {}
     print("")
-
+    print(model_paths)
     for scene_dir in model_paths:
         try:
             print("Scene:", scene_dir)
@@ -51,7 +53,7 @@ def evaluate(model_paths):
             full_dict_polytopeonly[scene_dir] = {}
             per_view_dict_polytopeonly[scene_dir] = {}
 
-            test_dir = Path(scene_dir) / "test"
+            test_dir = Path(scene_dir) / "train"
 
             for method in os.listdir(test_dir):
                 print("Method:", method)
@@ -66,16 +68,28 @@ def evaluate(model_paths):
                 renders_dir = method_dir / "renders"
                 renders, gts, image_names = readImages(renders_dir, gt_dir)
 
+                l1s = []
                 ssims = []
+                ms_ssims = []
                 psnrs = []
                 lpipss = []
 
                 for idx in tqdm(range(len(renders)), desc="Metric evaluation progress"):
+                    # torchvision.utils.save_image(
+                    #     renders[idx], os.path.join(method_dir / "testrender2", "{0:05d}".format(idx) + ".png")
+                    # )
+                    # torchvision.utils.save_image(
+                    #     gts[idx], os.path.join(method_dir / "testgt2", "{0:05d}".format(idx) + ".png")
+                    # )
+                    l1s.append(l1_loss(renders[idx], gts[idx]))
                     ssims.append(ssim(renders[idx], gts[idx]))
+                    ms_ssims.append(ms_ssim(renders[idx], gts[idx]))
                     psnrs.append(psnr(renders[idx], gts[idx]))
                     lpipss.append(lpips(renders[idx], gts[idx], net_type="vgg"))
 
+                print("  L1 : {:>12.7f}".format(torch.tensor(l1s).mean(), ".5"))
                 print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
+                print("  MS_SSIM : {:>12.7f}".format(torch.tensor(ms_ssims).mean(), ".5"))
                 print("  PSNR : {:>12.7f}".format(torch.tensor(psnrs).mean(), ".5"))
                 print("  LPIPS: {:>12.7f}".format(torch.tensor(lpipss).mean(), ".5"))
                 print("")
@@ -114,8 +128,9 @@ def evaluate(model_paths):
                 json.dump(full_dict[scene_dir], fp, indent=True)
             with open(scene_dir + "/per_view.json", "w") as fp:
                 json.dump(per_view_dict[scene_dir], fp, indent=True)
-        except:
+        except Exception as e:
             print("Unable to compute metrics for model", scene_dir)
+            print(e)
 
 
 if __name__ == "__main__":
