@@ -43,7 +43,7 @@ def training(
 ):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(dataset.sh_degree)
+    gaussians = GaussianModel()
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     if checkpoint:
@@ -74,7 +74,6 @@ def training(
                 (
                     custom_cam,
                     do_training,
-                    pipe.convert_SHs_python,
                     pipe.compute_cov3D_python,
                     keep_alive,
                     scaling_modifer,
@@ -102,10 +101,6 @@ def training(
         iter_start.record()
 
         gaussians.update_learning_rate(iteration)
-
-        # Every 1000 its we increase the levels of SH up to a maximum degree
-        if iteration % 1000 == 0:
-            gaussians.oneupSHdegree()
 
         # Pick a random Camera
         # if not viewpoint_stack:

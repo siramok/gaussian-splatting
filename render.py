@@ -20,6 +20,7 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
+from itertools import islice
 
 
 def render_set(
@@ -31,7 +32,7 @@ def render_set(
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), 10):
         rendering = render(
             view, gaussians, pipeline, background, use_trained_exp=train_test_exp
         )["render"]
@@ -52,7 +53,7 @@ def render_sets(
     skip_test: bool,
 ):
     with torch.no_grad():
-        gaussians = GaussianModel(dataset.sh_degree)
+        gaussians = GaussianModel()
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]

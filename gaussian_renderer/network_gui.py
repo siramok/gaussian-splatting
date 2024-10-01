@@ -72,7 +72,6 @@ def receive():
             fovx = message["fov_x"]
             znear = message["z_near"]
             zfar = message["z_far"]
-            do_shs_python = bool(message["shs_python"])
             do_rot_scale_python = bool(message["rot_scale_python"])
             keep_alive = bool(message["keep_alive"])
             scaling_modifier = message["scaling_modifier"]
@@ -102,7 +101,6 @@ def receive():
         return (
             custom_cam,
             do_training,
-            do_shs_python,
             do_rot_scale_python,
             keep_alive,
             scaling_modifier,

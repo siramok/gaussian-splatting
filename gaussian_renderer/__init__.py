@@ -16,8 +16,6 @@ from diff_gaussian_rasterization import (
     GaussianRasterizer,
 )
 from scene.gaussian_model import GaussianModel
-from utils.sh_utils import eval_sh
-
 
 def render(
     viewpoint_camera,
@@ -84,32 +82,10 @@ def render(
 
     values = pc.get_values
 
-    # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
-    # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
-    shs = None
-    colors_precomp = None
-    if override_color is None:
-        if pipe.convert_SHs_python:
-            shs_view = pc.get_features.transpose(1, 2).view(
-                -1, 3, (pc.max_sh_degree + 1) ** 2
-            )
-            dir_pp = pc.get_xyz - viewpoint_camera.camera_center.repeat(
-                pc.get_features.shape[0], 1
-            )
-            dir_pp_normalized = dir_pp / dir_pp.norm(dim=1, keepdim=True)
-            sh2rgb = eval_sh(pc.active_sh_degree, shs_view, dir_pp_normalized)
-            colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
-        else:
-            shs = pc.get_features
-    else:
-        colors_precomp = override_color
-
     # Rasterize visible Gaussians to image, obtain their radii (on screen).
     rendered_image, radii, depth_image = rasterizer(
         means3D=means3D,
         means2D=means2D,
-        shs=shs,
-        colors_precomp=colors_precomp,
         opacities=opacity,
         scales=scales,
         rotations=rotations,

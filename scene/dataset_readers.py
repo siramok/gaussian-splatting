@@ -165,15 +165,14 @@ def fetchPly(path):
     plydata = PlyData.read(path)
     vertices = plydata["vertex"]
     positions = np.vstack([vertices["x"], vertices["y"], vertices["z"]]).T
-    colors = np.vstack([vertices["red"], vertices["green"], vertices["blue"]]).T / 255.0
     normals = np.vstack([vertices["nx"], vertices["ny"], vertices["nz"]]).T
     values = np.vstack(vertices["value"]).T
     return BasicPointCloud(
-        points=positions, colors=colors, normals=normals, values=values
+        points=positions, normals=normals, values=values
     )
 
 
-def storePly(path, xyz, rgb, values):
+def storePly(path, xyz, values):
     # Define the dtype for the structured array
     dtype = [
         ("x", "f4"),
@@ -182,16 +181,13 @@ def storePly(path, xyz, rgb, values):
         ("nx", "f4"),
         ("ny", "f4"),
         ("nz", "f4"),
-        ("red", "u1"),
-        ("green", "u1"),
-        ("blue", "u1"),
         ("value", "f4"),
     ]
 
     normals = np.zeros_like(xyz)
 
     elements = np.empty(xyz.shape[0], dtype=dtype)
-    attributes = np.concatenate((xyz, normals, rgb, values), axis=1)
+    attributes = np.concatenate((xyz, normals, values), axis=1)
     elements[:] = list(map(tuple, attributes))
 
     # Create the PlyData object and write to file
@@ -383,7 +379,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
         xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
         shs = np.random.random((num_pts, 3)) / 255.0
         pcd = BasicPointCloud(
-            points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3))
+            points=xyz, normals=np.zeros((num_pts, 3)), values=np.random.random((num_pts))
         )
 
         storePly(ply_path, xyz, SH2RGB(shs) * 255)
@@ -459,24 +455,18 @@ def readDirectCameras(path):
     ])
 
     pl.add_volume(mesh, show_scalar_bar=False, scalars="value", cmap=colormap, opacity=np.ones((256,)) * 50)
-    # pl.add_mesh(mesh, show_scalar_bar=False, scalars="value")
-    # pl.add_mesh(mesh, show_scalar_bar=False, rgb="RGB")
     offset = list(pl.camera.focal_point)
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
     # Save the scaled and translated .ply
-    random_colors = SH2RGB(np.random.random((len(mesh.points), 3)) / 255.0) * 255
-
     storePly(
         os.path.join(path, "input.ply"),
         mesh.points,
-        random_colors,
         # np.random.rand(*values.shape),
         values
     )
-    # storePly(os.path.join(path, "input.ply"), mesh.points, mesh.get_array("RGB"))
 
     pl.background_color = "black"
     pl.view_xy()
