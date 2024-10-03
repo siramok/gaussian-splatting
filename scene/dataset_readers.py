@@ -454,7 +454,7 @@ def readDirectCameras(path):
         (1.0, 0.0, 1.0)   # Pink
     ])
 
-    pl.add_volume(mesh, show_scalar_bar=False, scalars="value", cmap=colormap, opacity=np.ones((256,)) * 50)
+    pl.add_volume(mesh, show_scalar_bar=False, scalars="value", cmap=colormap, opacity=np.ones((256,)) * 30)
     offset = list(pl.camera.focal_point)
     offset[2] -= 3
     offset = [-x for x in offset]

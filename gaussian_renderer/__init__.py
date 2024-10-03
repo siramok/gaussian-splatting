@@ -66,7 +66,6 @@ def render(
 
     means3D = pc.get_xyz
     means2D = screenspace_points
-    opacity = pc.get_opacity
 
     # If precomputed 3d covariance is provided, use it. If not, then it will be computed from
     # scaling / rotation by the rasterizer.
@@ -86,7 +85,6 @@ def render(
     rendered_image, radii, depth_image = rasterizer(
         means3D=means3D,
         means2D=means2D,
-        opacities=opacity,
         scales=scales,
         rotations=rotations,
         values=values,

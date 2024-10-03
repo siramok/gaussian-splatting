@@ -140,7 +140,7 @@ class GaussianModel:
         rots[:, 0] = 1
 
         opacities = self.inverse_opacity_activation(
-            0.1
+            (0.01)
             * torch.ones(
                 (fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"
             )
