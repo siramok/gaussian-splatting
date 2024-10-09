@@ -9,12 +9,12 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-from scene.cameras import Camera
-import numpy as np
-from utils.graphics_utils import fov2focal
-from PIL import Image
 import cv2
-from utils.general_utils import PILtoTorch
+import numpy as np
+from PIL import Image
+
+from scene.cameras import Camera
+from utils.graphics_utils import fov2focal
 
 WARNED = False
 
@@ -159,19 +159,11 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
     return camera
 
 
-def cameraList_from_camInfos(
-    cam_infos, resolution_scale, args, is_test_dataset, is_direct
-):
+def cameraList_from_camInfos(cam_infos, resolution_scale, args, is_test_dataset):
     camera_list = []
 
-    if is_direct:
-        for id, c in enumerate(cam_infos):
-            camera_list.append(
-                loadDirect(args, id, c, resolution_scale, is_test_dataset)
-            )
-    else:
-        for id, c in enumerate(cam_infos):
-            camera_list.append(loadCam(args, id, c, resolution_scale, is_test_dataset))
+    for id, c in enumerate(cam_infos):
+        camera_list.append(loadDirect(args, id, c, resolution_scale, is_test_dataset))
 
     return camera_list
 

@@ -9,14 +9,15 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import json
 import os
 import random
-import json
-from utils.system_utils import searchForMaxIteration
-from scene.dataset_readers import sceneLoadTypeCallbacks
-from scene.gaussian_model import GaussianModel
+
 from arguments import ModelParams
-from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+from scene.dataset_readers import readDirectSceneInfo
+from scene.gaussian_model import GaussianModel
+from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
+from utils.system_utils import searchForMaxIteration
 
 
 class Scene:
@@ -31,9 +32,6 @@ class Scene:
         shuffle=True,
         resolution_scales=[1.0],
     ):
-        """b
-        :param path: Path to colmap scene main folder.
-        """
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
@@ -50,23 +48,8 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        direct = False
-        if os.path.exists(os.path.join(args.source_path, "sparse")):
-            scene_info = sceneLoadTypeCallbacks["Colmap"](
-                args.source_path,
-                args.images,
-                args.depths,
-                args.eval,
-                args.train_test_exp,
-            )
-        elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
-            print("Found transforms_train.json file, assuming Blender data set!")
-            scene_info = sceneLoadTypeCallbacks["Blender"](
-                args.source_path, args.white_background, args.eval
-            )
-        elif os.path.exists(os.path.join(args.source_path, "data.vtu")):
-            direct = True
-            scene_info = sceneLoadTypeCallbacks["Direct"](args.source_path, args.eval)
+        if os.path.exists(os.path.join(args.source_path, "data.vtu")):
+            scene_info = readDirectSceneInfo(args.source_path, args.eval)
         else:
             assert False, "Could not recognize scene type!"
 
@@ -99,11 +82,11 @@ class Scene:
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.train_cameras, resolution_scale, args, False, direct
+                scene_info.train_cameras, resolution_scale, args, False
             )
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.test_cameras, resolution_scale, args, True, direct
+                scene_info.test_cameras, resolution_scale, args, True
             )
 
         if self.loaded_iter:
@@ -123,7 +106,7 @@ class Scene:
 
     def save(self, iteration):
         point_cloud_path = os.path.join(
-            self.model_path, "point_cloud/iteration_{}".format(iteration)
+            self.model_path, f"point_cloud/iteration_{iteration}"
         )
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
         exposure_dict = {

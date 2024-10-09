@@ -10,18 +10,27 @@
 #
 
 import os
-import torch
-from random import randint
-from utils.loss_utils import l1_loss, ssim, create_window
-from gaussian_renderer import render, network_gui
 import sys
-from scene import Scene, GaussianModel
-from utils.general_utils import safe_state, get_expon_lr_func
 import uuid
-from tqdm import tqdm
-from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
-from arguments import ModelParams, PipelineParams, OptimizationParams
+from random import randint
+
+import matplotlib.pyplot as plt
+import torch
+from tqdm import tqdm
+
+from arguments import ModelParams, OptimizationParams, PipelineParams
+from gaussian_renderer import network_gui, render
+from scene import GaussianModel, Scene
+from scene.gaussian_model import (
+    create_interpolator,
+    interpolate_new_values,
+    load_and_preprocess_mesh,
+)
+from utils.debug_utils import save_debug_image
+from utils.general_utils import get_expon_lr_func, safe_state
+from utils.image_utils import psnr
+from utils.loss_utils import create_window, l1_loss, ssim
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -29,6 +38,8 @@ try:
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
+
+DEBUG = False
 
 
 def training(
@@ -50,8 +61,11 @@ def training(
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
 
-    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
-    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    if opt.random_background:
+        background = torch.rand((3), device="cuda")
+    else:
+        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -62,6 +76,11 @@ def training(
 
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
+
+    # Used for setting new interpolated values, maybe GaussianModel can encapsulate this
+    data_path = os.path.join(dataset.source_path, "data.vtu")
+    ground_truth_mesh = load_and_preprocess_mesh(data_path)
+    interpolator = create_interpolator(ground_truth_mesh)
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -103,21 +122,22 @@ def training(
         gaussians.update_learning_rate(iteration)
 
         # Pick a random Camera
-        # if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_indices = list(range(len(viewpoint_stack)))
         rand_idx = randint(0, len(viewpoint_indices) - 1)
         viewpoint_cam = viewpoint_stack.pop(rand_idx)
-        vind = viewpoint_indices.pop(rand_idx)
+        viewpoint_indices.pop(rand_idx)
 
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
-        bg = torch.rand((3), device="cuda") if opt.random_background else background
-
         render_pkg = render(
-            viewpoint_cam, gaussians, pipe, bg, use_trained_exp=dataset.train_test_exp
+            viewpoint_cam,
+            gaussians,
+            pipe,
+            background,
+            use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
             render_pkg["render"],
@@ -131,6 +151,14 @@ def training(
         Ll1 = l1_loss(image, gt_image)
         ssim_value = ssim(image, gt_image, window)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
+
+        # Side-by-side debug images
+        if DEBUG:
+            capture_frequency = 500
+            if iteration % capture_frequency == 0:
+                save_debug_image(
+                    dataset.model_path, gt_image, image, f"debug_{iteration}.png"
+                )
 
         # Depth regularization
         Ll1depth_pure = 0.0
@@ -222,11 +250,13 @@ def training(
                 gaussians.optimizer.zero_grad(set_to_none=True)
 
             if iteration in checkpoint_iterations:
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                print(f"\n[ITER {iteration}] Saving Checkpoint")
                 torch.save(
                     (gaussians.capture(), iteration),
-                    scene.model_path + "/chkpnt" + str(iteration) + ".pth",
+                    os.path.join(scene.model_path, "/chkpnt{iteration}.pth"),
                 )
+
+        interpolate_new_values(gaussians, interpolator)
 
 
 def prepare_output_and_logger(args):

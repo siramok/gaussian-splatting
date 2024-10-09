@@ -1,6 +1,5 @@
-from typing import Sequence
-
 from itertools import chain
+from typing import Sequence
 
 import torch
 import torch.nn as nn

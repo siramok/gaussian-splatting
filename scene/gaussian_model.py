@@ -9,18 +9,66 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import torch
-import numpy as np
-from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
-from torch import nn
-import os
 import json
-from utils.system_utils import mkdir_p
+import os
+
+import numpy as np
+import pyvista as pv
+import torch
 from plyfile import PlyData, PlyElement
-from utils.sh_utils import RGB2SH
+from scipy.interpolate import LinearNDInterpolator
 from simple_knn._C import distCUDA2
+from torch import nn
+
+from utils.general_utils import (
+    build_rotation,
+    build_scaling_rotation,
+    get_expon_lr_func,
+    inverse_sigmoid,
+    strip_symmetric,
+)
 from utils.graphics_utils import BasicPointCloud
-from utils.general_utils import strip_symmetric, build_scaling_rotation
+from utils.system_utils import mkdir_p
+
+
+def load_and_preprocess_mesh(data_path):
+    mesh = pv.read(data_path)
+
+    # Normalize values to [0, 1]
+    values = mesh.get_array("value").reshape(-1, 1)
+    min_val = values.min()
+    max_val = values.max()
+    values = (values - min_val) / (max_val - min_val)
+    mesh.get_array("value")[:] = values.ravel()
+
+    # Scale mesh to the unit cube
+    min_vals = np.min(mesh.points, axis=0)
+    max_vals = np.max(mesh.points, axis=0)
+    max_abs_val = max(np.max(np.abs(min_vals)), np.max(np.abs(max_vals)))
+    if max_abs_val > 1:
+        scale_factor = -1.0 / max_abs_val
+        mesh.scale(scale_factor, inplace=True)
+
+    return mesh
+
+
+def create_interpolator(mesh):
+    points = mesh.points
+    values = mesh.get_array("value")
+    interpolator = LinearNDInterpolator(points, values)
+    return interpolator
+
+
+def interpolate_new_values(gaussians, interpolator):
+    gaussian_positions = gaussians._xyz.detach().cpu().numpy()
+
+    interpolated_values = interpolator(gaussian_positions)
+    interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
+    interpolated_values = torch.tensor(
+        interpolated_values, dtype=torch.float, device="cuda"
+    ).reshape(-1, 1)
+
+    gaussians._values = nn.Parameter(interpolated_values.requires_grad_(False))
 
 
 class GaussianModel:
@@ -122,7 +170,7 @@ class GaussianModel:
         return self.covariance_activation(
             self.get_scaling, scaling_modifier, self._rotation
         )
-    
+
     def create_from_pcd(
         self, pcd: BasicPointCloud, cam_infos: int, spatial_lr_scale: float
     ):
@@ -154,7 +202,7 @@ class GaussianModel:
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._values = nn.Parameter(values.requires_grad_(True))
+        self._values = nn.Parameter(values.requires_grad_(False))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
         self.exposure_mapping = {
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
@@ -188,11 +236,6 @@ class GaussianModel:
                 "params": [self._rotation],
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
-            },
-            {
-                "params": [self._values],
-                "lr": training_args.values_lr,
-                "name": "value",
             },
         ]
 
@@ -331,7 +374,7 @@ class GaussianModel:
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
+            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(False)
         )
 
     def replace_tensor_to_optimizer(self, tensor, name):
@@ -379,7 +422,6 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
-        self._values = optimizable_tensors["value"]
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
 
@@ -427,14 +469,12 @@ class GaussianModel:
         new_opacities,
         new_scaling,
         new_rotation,
-        new_values,
     ):
         d = {
             "xyz": new_xyz,
             "opacity": new_opacities,
             "scaling": new_scaling,
             "rotation": new_rotation,
-            "value": new_values,
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
@@ -442,7 +482,6 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
-        self._values = optimizable_tensors["value"]
 
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
@@ -472,14 +511,12 @@ class GaussianModel:
         )
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N, 1)
-        new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
             new_xyz,
             new_opacity,
             new_scaling,
             new_rotation,
-            new_values,
         )
 
         prune_filter = torch.cat(
@@ -505,14 +542,12 @@ class GaussianModel:
         new_opacities = self._opacity[selected_pts_mask]
         new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
-        new_values = self._values[selected_pts_mask]
 
         self.densification_postfix(
             new_xyz,
             new_opacities,
             new_scaling,
             new_rotation,
-            new_values,
         )
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):

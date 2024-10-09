@@ -9,19 +9,20 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-from pathlib import Path
+import json
 import os
-from PIL import Image
+from argparse import ArgumentParser
+from pathlib import Path
+
 import torch
 import torchvision.transforms.functional as tf
-import torchvision
-from utils.loss_utils import ssim, l1_loss
-from utils.ms_ssim import ms_ssim
-from lpipsPyTorch import lpips
-import json
+from PIL import Image
 from tqdm import tqdm
+
+from lpipsPyTorch import lpips
 from utils.image_utils import psnr
-from argparse import ArgumentParser
+from utils.loss_utils import l1_loss, ssim
+from utils.ms_ssim import ms_ssim
 
 
 def readImages(renders_dir, gt_dir):
@@ -89,7 +90,9 @@ def evaluate(model_paths):
 
                 print("  L1 : {:>12.7f}".format(torch.tensor(l1s).mean(), ".5"))
                 print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
-                print("  MS_SSIM : {:>12.7f}".format(torch.tensor(ms_ssims).mean(), ".5"))
+                print(
+                    "  MS_SSIM : {:>12.7f}".format(torch.tensor(ms_ssims).mean(), ".5")
+                )
                 print("  PSNR : {:>12.7f}".format(torch.tensor(psnrs).mean(), ".5"))
                 print("  LPIPS: {:>12.7f}".format(torch.tensor(lpipss).mean(), ".5"))
                 print("")

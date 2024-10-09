@@ -1,8 +1,9 @@
-import numpy as np
 import argparse
-import cv2
-from joblib import delayed, Parallel
 import json
+
+import cv2
+import numpy as np
+from joblib import Parallel, delayed
 from read_write_model import *
 
 

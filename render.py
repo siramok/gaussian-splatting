@@ -9,18 +9,19 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import torch
-from scene import Scene
 import os
-from tqdm import tqdm
-from os import makedirs
-from gaussian_renderer import render
-import torchvision
-from utils.general_utils import safe_state
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_renderer import GaussianModel
 from itertools import islice
+from os import makedirs
+
+import torch
+import torchvision
+from tqdm import tqdm
+
+from arguments import ModelParams, PipelineParams, get_combined_args
+from gaussian_renderer import GaussianModel, render
+from scene import Scene
+from utils.general_utils import safe_state
 
 
 def render_set(

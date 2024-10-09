@@ -9,10 +9,10 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import os
 import logging
-from argparse import ArgumentParser
+import os
 import shutil
+from argparse import ArgumentParser
 
 # This Python script is based on the shell converter script provided in the MipNerF 360 repository.
 parser = ArgumentParser("Colmap converter")

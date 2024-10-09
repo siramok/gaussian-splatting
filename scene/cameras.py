@@ -9,12 +9,13 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import cv2
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
-from utils.graphics_utils import getWorld2View2, getProjectionMatrix
+
 from utils.general_utils import PILtoTorch
-import cv2
+from utils.graphics_utils import getProjectionMatrix, getWorld2View2
 
 
 class Camera(nn.Module):
