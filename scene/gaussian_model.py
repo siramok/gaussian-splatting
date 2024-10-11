@@ -202,7 +202,7 @@ class GaussianModel:
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._values = nn.Parameter(values.requires_grad_(False))
+        self._values = nn.Parameter(values.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
         self.exposure_mapping = {
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
@@ -236,6 +236,11 @@ class GaussianModel:
                 "params": [self._rotation],
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
+            },
+                        {
+                "params": [self._values],
+                "lr": training_args.values_lr,
+                "name": "value",
             },
         ]
 
@@ -374,7 +379,7 @@ class GaussianModel:
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(False)
+            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
         )
 
     def replace_tensor_to_optimizer(self, tensor, name):
@@ -422,6 +427,7 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
+        self._values = optimizable_tensors["value"]
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
 
@@ -469,12 +475,14 @@ class GaussianModel:
         new_opacities,
         new_scaling,
         new_rotation,
+        new_values
     ):
         d = {
             "xyz": new_xyz,
             "opacity": new_opacities,
             "scaling": new_scaling,
             "rotation": new_rotation,
+            "value": new_values
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
@@ -482,6 +490,7 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
+        self._values = optimizable_tensors["value"]
 
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
@@ -511,12 +520,14 @@ class GaussianModel:
         )
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N, 1)
+        new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
             new_xyz,
             new_opacity,
             new_scaling,
             new_rotation,
+            new_values
         )
 
         prune_filter = torch.cat(
@@ -542,12 +553,14 @@ class GaussianModel:
         new_opacities = self._opacity[selected_pts_mask]
         new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
+        new_values = self._values[selected_pts_mask]
 
         self.densification_postfix(
             new_xyz,
             new_opacities,
             new_scaling,
             new_rotation,
+            new_values,
         )
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
