@@ -47,6 +47,7 @@ class SceneInfo(NamedTuple):
     test_cameras: list
     nerf_normalization: dict
     ply_path: str
+    mesh: pv.PolyData
 
 
 def fetchPly(path):
@@ -101,7 +102,6 @@ def readDirectCameras(path):
         shutil.rmtree(image_dir)
     os.makedirs(image_dir)
 
-    # TODO: make the width and height configurable via cli?
     width = 800
     height = 800
     ratio = width / height
@@ -245,7 +245,7 @@ def readDirectCameras(path):
             image_counter += 1
 
     pl.close()
-    return cam_infos
+    return cam_infos, mesh
 
 
 def getDirectppNorm(cam_info):
@@ -272,7 +272,7 @@ def getDirectppNorm(cam_info):
 
 
 def readDirectSceneInfo(path, eval, llffhold=8):
-    cam_infos = readDirectCameras(path)
+    cam_infos, mesh = readDirectCameras(path)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -297,5 +297,6 @@ def readDirectSceneInfo(path, eval, llffhold=8):
         test_cameras=test_cam_infos,
         nerf_normalization=normalization,
         ply_path=ply_path,
+        mesh=mesh,
     )
     return scene_info
