@@ -97,11 +97,15 @@ class Scene:
                     "iteration_" + str(self.loaded_iter),
                     "point_cloud.ply",
                 ),
+                scene_info.mesh,
                 args.train_test_exp,
             )
         else:
             self.gaussians.create_from_pcd(
-                scene_info.point_cloud, scene_info.train_cameras, self.cameras_extent
+                scene_info.point_cloud,
+                scene_info.train_cameras,
+                self.cameras_extent,
+                scene_info.mesh,
             )
 
     def save(self, iteration):

@@ -1,6 +1,7 @@
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def save_debug_image(path, gt_image, image, filename):
@@ -29,3 +30,21 @@ def save_debug_image(path, gt_image, image, filename):
     plt.tight_layout()
     plt.savefig(os.path.join(debug_path, filename))
     plt.close(fig)
+
+
+def analyze_array(arr):
+    arr = np.array(arr).flatten()
+    nan_count = np.isnan(arr).sum()
+    non_nan_values = arr[~np.isnan(arr)]
+
+    if len(non_nan_values) > 0:
+        avg = np.mean(non_nan_values)
+        min_val = np.min(non_nan_values)
+        max_val = np.max(non_nan_values)
+    else:
+        avg = min_val = max_val = None
+
+    print(f"Number of NaN values: {nan_count}")
+    print(f"Average of non-NaN values: {avg}")
+    print(f"Minimum of non-NaN values: {min_val}")
+    print(f"Maximum of non-NaN values: {max_val}")

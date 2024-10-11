@@ -15,18 +15,12 @@ import uuid
 from argparse import ArgumentParser, Namespace
 from random import randint
 
-import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
 from arguments import ModelParams, OptimizationParams, PipelineParams
 from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
-from scene.gaussian_model import (
-    create_interpolator,
-    interpolate_new_values,
-    load_and_preprocess_mesh,
-)
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
 from utils.image_utils import psnr
@@ -76,11 +70,6 @@ def training(
 
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
-
-    # Used for setting new interpolated values, maybe GaussianModel can encapsulate this
-    data_path = os.path.join(dataset.source_path, "data.vtu")
-    ground_truth_mesh = load_and_preprocess_mesh(data_path)
-    interpolator = create_interpolator(ground_truth_mesh)
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -256,7 +245,7 @@ def training(
                     os.path.join(scene.model_path, "/chkpnt{iteration}.pth"),
                 )
 
-        interpolate_new_values(gaussians, interpolator)
+        gaussians.interpolate_new_values()
 
 
 def prepare_output_and_logger(args):
@@ -401,6 +390,7 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     # Start GUI server, configure and run training
+    # TODO: Can we remove this GUI server?
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)

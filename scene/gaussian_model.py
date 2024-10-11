@@ -16,7 +16,7 @@ import numpy as np
 import pyvista as pv
 import torch
 from plyfile import PlyData, PlyElement
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import NearestNDInterpolator
 from simple_knn._C import distCUDA2
 from torch import nn
 
@@ -29,46 +29,6 @@ from utils.general_utils import (
 )
 from utils.graphics_utils import BasicPointCloud
 from utils.system_utils import mkdir_p
-
-
-def load_and_preprocess_mesh(data_path):
-    mesh = pv.read(data_path)
-
-    # Normalize values to [0, 1]
-    values = mesh.get_array("value").reshape(-1, 1)
-    min_val = values.min()
-    max_val = values.max()
-    values = (values - min_val) / (max_val - min_val)
-    mesh.get_array("value")[:] = values.ravel()
-
-    # Scale mesh to the unit cube
-    min_vals = np.min(mesh.points, axis=0)
-    max_vals = np.max(mesh.points, axis=0)
-    max_abs_val = max(np.max(np.abs(min_vals)), np.max(np.abs(max_vals)))
-    if max_abs_val > 1:
-        scale_factor = -1.0 / max_abs_val
-        mesh.scale(scale_factor, inplace=True)
-
-    return mesh
-
-
-def create_interpolator(mesh):
-    points = mesh.points
-    values = mesh.get_array("value")
-    interpolator = LinearNDInterpolator(points, values)
-    return interpolator
-
-
-def interpolate_new_values(gaussians, interpolator):
-    gaussian_positions = gaussians._xyz.detach().cpu().numpy()
-
-    interpolated_values = interpolator(gaussian_positions)
-    interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
-    interpolated_values = torch.tensor(
-        interpolated_values, dtype=torch.float, device="cuda"
-    ).reshape(-1, 1)
-
-    gaussians._values = nn.Parameter(interpolated_values.requires_grad_(False))
 
 
 class GaussianModel:
@@ -102,6 +62,7 @@ class GaussianModel:
         self.optimizer = None
         self.percent_dense = 0
         self.spatial_lr_scale = 0
+        self.interpolator = None
         self.setup_functions()
 
     def capture(self):
@@ -172,7 +133,11 @@ class GaussianModel:
         )
 
     def create_from_pcd(
-        self, pcd: BasicPointCloud, cam_infos: int, spatial_lr_scale: float
+        self,
+        pcd: BasicPointCloud,
+        cam_infos: int,
+        spatial_lr_scale: float,
+        mesh: pv.PolyData,
     ):
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
@@ -210,6 +175,8 @@ class GaussianModel:
         self.pretrained_exposures = None
         exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
+
+        self.create_interpolator(mesh)
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -307,6 +274,9 @@ class GaussianModel:
         el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
 
+        # Also produce an ascii version of the .ply file
+        self.convert_ply_to_ascii(path)
+
     def reset_opacity(self):
         opacities_new = self.inverse_opacity_activation(
             torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.01)
@@ -314,7 +284,7 @@ class GaussianModel:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path, use_train_test_exp=False):
+    def load_ply(self, path, mesh, use_train_test_exp=False):
         plydata = PlyData.read(path)
         if use_train_test_exp:
             exposure_file = os.path.join(
@@ -381,6 +351,8 @@ class GaussianModel:
         self._values = nn.Parameter(
             torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
         )
+
+        self.create_interpolator(mesh)
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
@@ -586,3 +558,45 @@ class GaussianModel:
             viewspace_point_tensor.grad[update_filter, :2], dim=-1, keepdim=True
         )
         self.denom[update_filter] += 1
+
+    from plyfile import PlyData
+
+    def create_interpolator(self, mesh):
+        points = mesh.points
+        values = mesh.get_array("value").reshape(-1, 1)
+        self.interpolator = NearestNDInterpolator(
+            points, values, tree_options={"leafsize": 30}
+        )
+
+    def interpolate_new_values(self):
+        gaussian_positions = self._xyz.detach().cpu().numpy()
+
+        interpolated_values = self.interpolator(gaussian_positions)
+        # TODO: How do we want to handle nan?
+        interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
+
+        interpolated_values = torch.tensor(
+            interpolated_values, dtype=torch.float, device="cuda"
+        ).reshape(-1, 1)
+
+        self._values = nn.Parameter(interpolated_values.requires_grad_(False))
+
+    def convert_ply_to_ascii(self, binary_ply_file_path):
+        ascii_ply_file_path = binary_ply_file_path.replace(".ply", "_ascii.ply")
+
+        ply_data = PlyData.read(binary_ply_file_path)
+
+        with open(ascii_ply_file_path, "w") as f:
+            f.write(f"ply\n")
+            f.write(f"format ascii 1.0\n")
+
+            for element in ply_data.elements:
+                f.write(f"element {element.name} {element.count}\n")
+                for prop in element.properties:
+                    f.write(f"property float {prop.name}\n")
+
+            f.write(f"end_header\n")
+
+            for element in ply_data.elements:
+                for row in element.data:
+                    f.write(" ".join(str(val) for val in row) + "\n")
