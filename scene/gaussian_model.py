@@ -65,6 +65,7 @@ class GaussianModel:
         self.interpolator = None
         self.interpolation_threshold = 0.001
         self.interpolation_mask = None
+        self.last_interpolated_xyz = None
         self.should_interpolate = False
         self.setup_functions()
 
@@ -99,7 +100,9 @@ class GaussianModel:
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
+        self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(self._xyz.shape[0], True)
+        self.should_interpolate = True
 
     @property
     def get_scaling(self):
@@ -183,7 +186,9 @@ class GaussianModel:
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
         self.create_interpolator(mesh)
+        self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(self._xyz.shape[0], True)
+        self.should_interpolate = True
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -362,6 +367,7 @@ class GaussianModel:
         )
 
         self.create_interpolator(mesh)
+        self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(len(self._values), True)
 
     def replace_tensor_to_optimizer(self, tensor, name):
@@ -416,6 +422,7 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
+        self.last_interpolated_xyz = self.last_interpolated_xyz[valid_points_mask]
         self.interpolation_mask = self.interpolation_mask[valid_points_mask.detach(
         ).cpu().numpy()]
 
@@ -471,33 +478,38 @@ class GaussianModel:
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
 
-        # TODO: Gaussian positions seem to stablize pretty early in the training
-        # process, after which we basically don't interpolate any new values.
-        # This section can be optimized a bit more by detecting the stable
-        # state and not computing new interpolation masks afterwards.
+        # The sizes may not be the same, which necessitates extending the arrays
+        # used for interpolation
         new_size = optimizable_tensors["xyz"].shape[0]
         old_size = self._xyz.shape[0]
 
+        # We always want the interpolation mask to be the same size as the incoming xyz tensor
         interpolation_mask = np.full(new_size, False)
 
         if new_size > old_size:
+            # Always interpolate the new points
             interpolation_mask[old_size:] = True
 
-            values_extension = np.zeros((new_size - old_size, 1))
+            # Extend these tensors to avoid size mismatches during interpolation
+            self.last_interpolated_xyz = torch.cat(
+                (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]), dim=0)
             self._values = torch.cat(
                 (self._values, torch.tensor(
-                    values_extension, dtype=torch.float, device="cuda")),
+                    np.zeros((new_size - old_size, 1)), dtype=torch.float, device="cuda")),
                 dim=0
             )
 
-        old_xyz = optimizable_tensors["xyz"][:old_size]
-        diff = old_xyz - self._xyz
+        # Compute the distances between the new points and the last interpolated points
+        new_xyz = optimizable_tensors["xyz"][:old_size]
+        diff = new_xyz - self.last_interpolated_xyz[:old_size]
         distances = torch.norm(diff, dim=1)
 
+        # If a Gaussian's position has moved more than the threshold, re-interpolate its value
         interpolation_mask[:old_size] = (
             distances > self.interpolation_threshold).detach().cpu().numpy()
 
         self.interpolation_mask = interpolation_mask
+        # Only bother interpolating if there are any points that need updating
         self.should_interpolate = np.any(interpolation_mask)
 
         self._xyz = optimizable_tensors["xyz"]
@@ -610,9 +622,11 @@ class GaussianModel:
         )
 
     def interpolate_new_values(self):
+        # Return early if there are no new points to interpolate
         if not self.should_interpolate:
             return
 
+        # Filter out the positions that need to be interpolated
         gaussian_positions = self._xyz.detach().cpu().numpy()
         gaussian_positions = gaussian_positions[self.interpolation_mask]
 
@@ -626,6 +640,9 @@ class GaussianModel:
         ).reshape(-1, 1)
 
         self._values = nn.Parameter(new_values.requires_grad_(False))
+
+        # Update the last interpolated positions, and reset the interpolation mask
+        self.last_interpolated_xyz[self.interpolation_mask] = self._xyz[self.interpolation_mask]
         self.interpolation_mask = np.full(self._xyz.shape[0], False)
         self.should_interpolate = False
 
