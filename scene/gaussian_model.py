@@ -251,20 +251,17 @@ class GaussianModel:
                 return lr
 
     def construct_list_of_attributes(self):
-        attributes = ["x", "y", "z", "nx", "ny", "nz"]
-        attributes.append("opacity")
+        attributes = ["x", "y", "z", "value", "opacity"]
         for i in range(self._scaling.shape[1]):
             attributes.append("scale_{}".format(i))
         for i in range(self._rotation.shape[1]):
             attributes.append("rot_{}".format(i))
-        attributes.append("value")
         return attributes
 
     def save_ply(self, path):
         mkdir_p(os.path.dirname(path))
 
         xyz = self._xyz.detach().cpu().numpy()
-        normals = np.zeros_like(xyz)
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
@@ -276,7 +273,7 @@ class GaussianModel:
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
         attributes = np.concatenate(
-            (xyz, normals, opacities, scale, rotation, values), axis=1
+            (xyz, values, opacities, scale, rotation), axis=1
         )
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, "vertex")

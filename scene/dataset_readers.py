@@ -54,9 +54,8 @@ def fetchPly(path):
     plydata = PlyData.read(path)
     vertices = plydata["vertex"]
     positions = np.vstack([vertices["x"], vertices["y"], vertices["z"]]).T
-    normals = np.vstack([vertices["nx"], vertices["ny"], vertices["nz"]]).T
     values = np.vstack(vertices["value"]).T
-    return BasicPointCloud(points=positions, normals=normals, values=values)
+    return BasicPointCloud(points=positions, values=values)
 
 
 def storePly(path, xyz, values):
@@ -65,16 +64,11 @@ def storePly(path, xyz, values):
         ("x", "f4"),
         ("y", "f4"),
         ("z", "f4"),
-        ("nx", "f4"),
-        ("ny", "f4"),
-        ("nz", "f4"),
         ("value", "f4"),
     ]
 
-    normals = np.zeros_like(xyz)
-
     elements = np.empty(xyz.shape[0], dtype=dtype)
-    attributes = np.concatenate((xyz, normals, values), axis=1)
+    attributes = np.concatenate((xyz, values), axis=1)
     elements[:] = list(map(tuple, attributes))
 
     # Create the PlyData object and write to file
