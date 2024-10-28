@@ -89,7 +89,8 @@ def arrayFromVTKMatrix(vmatrix):
     elif isinstance(vmatrix, vtkMatrix3x3):
         matrixSize = 3
     else:
-        raise RuntimeError("Input must be vtk.vtkMatrix3x3 or vtk.vtkMatrix4x4")
+        raise RuntimeError(
+            "Input must be vtk.vtkMatrix3x3 or vtk.vtkMatrix4x4")
     narray = np.eye(matrixSize)
     vmatrix.DeepCopy(narray.ravel(), vmatrix)
     return narray.astype(np.float32)
@@ -102,6 +103,7 @@ def readDirectCameras(path):
         shutil.rmtree(image_dir)
     os.makedirs(image_dir)
 
+    # TODO: make the width and height configurable?
     width = 800
     height = 800
     ratio = width / height
@@ -126,7 +128,8 @@ def readDirectCameras(path):
     # Scale mesh to the unit cube
     points_min = np.min(mesh.points, axis=0)
     points_max = np.max(mesh.points, axis=0)
-    points_max_abs = max(np.max(np.abs(points_min)), np.max(np.abs(points_max)))
+    points_max_abs = max(np.max(np.abs(points_min)),
+                         np.max(np.abs(points_max)))
     if points_max_abs > 1:
         scale_factor = -1.0 / points_max_abs
         mesh.scale(scale_factor, inplace=True)
@@ -208,7 +211,8 @@ def readDirectCameras(path):
             FovX = focal2fov(fov2focal(FovY, height), width)
 
             proj_matrix = arrayFromVTKMatrix(
-                camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
+                camera.GetCompositeProjectionTransformMatrix(
+                    ratio, 0.001, 1000.0)
             )
 
             # Not sure why this is necessary
@@ -275,7 +279,8 @@ def readDirectSceneInfo(path, eval, llffhold=8):
     cam_infos, mesh = readDirectCameras(path)
 
     if eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+        train_cam_infos = [c for idx, c in enumerate(
+            cam_infos) if idx % llffhold != 0]
         # TODO: verify that this actually sets is_test to True
         test_cam_infos = [
             c._replace(is_test=True)

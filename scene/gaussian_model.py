@@ -63,6 +63,9 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.interpolator = None
+        self.interpolation_threshold = 0.001
+        self.interpolation_mask = None
+        self.should_interpolate = False
         self.setup_functions()
 
     def capture(self):
@@ -96,6 +99,7 @@ class GaussianModel:
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
+        self.interpolation_mask = np.full(self._xyz.shape[0], True)
 
     @property
     def get_scaling(self):
@@ -142,7 +146,8 @@ class GaussianModel:
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
 
-        print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+        print("Number of points at initialisation : ",
+              fused_point_cloud.shape[0])
 
         dist2 = torch.clamp_min(
             distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
@@ -173,17 +178,20 @@ class GaussianModel:
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
         }
         self.pretrained_exposures = None
-        exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
+        exposure = torch.eye(3, 4, device="cuda")[
+            None].repeat(len(cam_infos), 1, 1)
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
         self.create_interpolator(mesh)
+        self.interpolation_mask = np.full(self._xyz.shape[0], True)
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
-        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum = torch.zeros(
+            (self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-        l = [
+        optimizer_params = [
             {
                 "params": [self._xyz],
                 "lr": training_args.position_lr_init * self.spatial_lr_scale,
@@ -206,7 +214,7 @@ class GaussianModel:
             },
         ]
 
-        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+        self.optimizer = torch.optim.Adam(optimizer_params, lr=0.0, eps=1e-15)
         if self.pretrained_exposures is None:
             self.exposure_optimizer = torch.optim.Adam([self._exposure])
 
@@ -238,14 +246,14 @@ class GaussianModel:
                 return lr
 
     def construct_list_of_attributes(self):
-        l = ["x", "y", "z", "nx", "ny", "nz"]
-        l.append("opacity")
+        attributes = ["x", "y", "z", "nx", "ny", "nz"]
+        attributes.append("opacity")
         for i in range(self._scaling.shape[1]):
-            l.append("scale_{}".format(i))
+            attributes.append("scale_{}".format(i))
         for i in range(self._rotation.shape[1]):
-            l.append("rot_{}".format(i))
-        l.append("value")
-        return l
+            attributes.append("rot_{}".format(i))
+        attributes.append("value")
+        return attributes
 
     def save_ply(self, path):
         mkdir_p(os.path.dirname(path))
@@ -274,9 +282,11 @@ class GaussianModel:
 
     def reset_opacity(self):
         opacities_new = self.inverse_opacity_activation(
-            torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.01)
+            torch.min(self.get_opacity, torch.ones_like(
+                self.get_opacity) * 0.01)
         )
-        optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
+        optimizable_tensors = self.replace_tensor_to_optimizer(
+            opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
     def load_ply(self, path, mesh, use_train_test_exp=False):
@@ -294,7 +304,7 @@ class GaussianModel:
                     .cuda()
                     for image_name in exposures
                 }
-                print(f"Pretrained exposures loaded.")
+                print("Pretrained exposures loaded.")
             else:
                 print(f"No exposure to be loaded at {exposure_file}")
                 self.pretrained_exposures = None
@@ -330,7 +340,8 @@ class GaussianModel:
         values = np.asarray(plydata.elements[0]["value"])[..., np.newaxis]
 
         self._xyz = nn.Parameter(
-            torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True)
+            torch.tensor(xyz, dtype=torch.float,
+                         device="cuda").requires_grad_(True)
         )
         self._opacity = nn.Parameter(
             torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(
@@ -338,22 +349,27 @@ class GaussianModel:
             )
         )
         self._scaling = nn.Parameter(
-            torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True)
+            torch.tensor(scales, dtype=torch.float,
+                         device="cuda").requires_grad_(True)
         )
         self._rotation = nn.Parameter(
-            torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
+            torch.tensor(rots, dtype=torch.float,
+                         device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(False)
+            torch.tensor(values, dtype=torch.float,
+                         device="cuda").requires_grad_(False)
         )
 
         self.create_interpolator(mesh)
+        self.interpolation_mask = np.full(len(self._values), True)
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
-                stored_state = self.optimizer.state.get(group["params"][0], None)
+                stored_state = self.optimizer.state.get(
+                    group["params"][0], None)
                 stored_state["exp_avg"] = torch.zeros_like(tensor)
                 stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
@@ -394,11 +410,14 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
+        self._values = self._values[valid_points_mask]
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
-
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
+
+        self.interpolation_mask = self.interpolation_mask[valid_points_mask.detach(
+        ).cpu().numpy()]
 
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
@@ -412,7 +431,8 @@ class GaussianModel:
                     (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
                 )
                 stored_state["exp_avg_sq"] = torch.cat(
-                    (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
+                    (stored_state["exp_avg_sq"],
+                     torch.zeros_like(extension_tensor)),
                     dim=0,
                 )
 
@@ -450,12 +470,43 @@ class GaussianModel:
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
+
+        # TODO: Gaussian positions seem to stablize pretty early in the training
+        # process, after which we basically don't interpolate any new values.
+        # This section can be optimized a bit more by detecting the stable
+        # state and not computing new interpolation masks afterwards.
+        new_size = optimizable_tensors["xyz"].shape[0]
+        old_size = self._xyz.shape[0]
+
+        interpolation_mask = np.full(new_size, False)
+
+        if new_size > old_size:
+            interpolation_mask[old_size:] = True
+
+            values_extension = np.zeros((new_size - old_size, 1))
+            self._values = torch.cat(
+                (self._values, torch.tensor(
+                    values_extension, dtype=torch.float, device="cuda")),
+                dim=0
+            )
+
+        old_xyz = optimizable_tensors["xyz"][:old_size]
+        diff = old_xyz - self._xyz
+        distances = torch.norm(diff, dim=1)
+
+        interpolation_mask[:old_size] = (
+            distances > self.interpolation_threshold).detach().cpu().numpy()
+
+        self.interpolation_mask = interpolation_mask
+        self.should_interpolate = np.any(interpolation_mask)
+
         self._xyz = optimizable_tensors["xyz"]
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
 
-        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum = torch.zeros(
+            (self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -464,7 +515,8 @@ class GaussianModel:
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[: grads.shape[0]] = grads.squeeze()
-        selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
+        selected_pts_mask = torch.where(
+            padded_grad >= grad_threshold, True, False)
         selected_pts_mask = torch.logical_and(
             selected_pts_mask,
             torch.max(self.get_scaling, dim=1).values
@@ -474,7 +526,8 @@ class GaussianModel:
         stds = self.get_scaling[selected_pts_mask].repeat(N, 1)
         means = torch.zeros((stds.size(0), 3), device="cuda")
         samples = torch.normal(mean=means, std=stds)
-        rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N, 1, 1)
+        rots = build_rotation(
+            self._rotation[selected_pts_mask]).repeat(N, 1, 1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[
             selected_pts_mask
         ].repeat(N, 1)
@@ -494,7 +547,8 @@ class GaussianModel:
         prune_filter = torch.cat(
             (
                 selected_pts_mask,
-                torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool),
+                torch.zeros(N * selected_pts_mask.sum(),
+                            device="cuda", dtype=bool),
             )
         )
         self.prune_points(prune_filter)
@@ -556,33 +610,41 @@ class GaussianModel:
         )
 
     def interpolate_new_values(self):
-        gaussian_positions = self._xyz.detach().cpu().numpy()
+        if not self.should_interpolate:
+            return
 
-        interpolated_values = self.interpolator(gaussian_positions)
-        # TODO: How do we want to handle nan?
+        gaussian_positions = self._xyz.detach().cpu().numpy()
+        gaussian_positions = gaussian_positions[self.interpolation_mask]
+
+        interpolated_values = self._values.detach().cpu().numpy()
+        interpolated_values[self.interpolation_mask] = self.interpolator(
+            gaussian_positions)
         interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
 
-        interpolated_values = torch.tensor(
+        new_values = torch.tensor(
             interpolated_values, dtype=torch.float, device="cuda"
         ).reshape(-1, 1)
 
-        self._values = nn.Parameter(interpolated_values.requires_grad_(False))
+        self._values = nn.Parameter(new_values.requires_grad_(False))
+        self.interpolation_mask = np.full(self._xyz.shape[0], False)
+        self.should_interpolate = False
 
     def convert_ply_to_ascii(self, binary_ply_file_path):
-        ascii_ply_file_path = binary_ply_file_path.replace(".ply", "_ascii.ply")
+        ascii_ply_file_path = binary_ply_file_path.replace(
+            ".ply", "_ascii.ply")
 
         ply_data = PlyData.read(binary_ply_file_path)
 
         with open(ascii_ply_file_path, "w") as f:
-            f.write(f"ply\n")
-            f.write(f"format ascii 1.0\n")
+            f.write("ply\n")
+            f.write("format ascii 1.0\n")
 
             for element in ply_data.elements:
                 f.write(f"element {element.name} {element.count}\n")
                 for prop in element.properties:
                     f.write(f"property float {prop.name}\n")
 
-            f.write(f"end_header\n")
+            f.write("end_header\n")
 
             for element in ply_data.elements:
                 for row in element.data:

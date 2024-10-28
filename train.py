@@ -71,12 +71,13 @@ def training(
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
 
-    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
+    progress_bar = tqdm(range(first_iter, opt.iterations),
+                        desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):
-        if network_gui.conn == None:
+        if network_gui.conn is None:
             network_gui.try_connect()
-        while network_gui.conn != None:
+        while network_gui.conn is not None:
             try:
                 net_image_bytes = None
                 (
@@ -86,7 +87,7 @@ def training(
                     keep_alive,
                     scaling_modifer,
                 ) = network_gui.receive()
-                if custom_cam != None:
+                if custom_cam is not None:
                     net_image = render(
                         custom_cam, gaussians, pipe, background, scaling_modifer
                     )["render"]
@@ -103,7 +104,7 @@ def training(
                     (iteration < int(opt.iterations)) or not keep_alive
                 ):
                     break
-            except Exception as e:
+            except Exception:
                 network_gui.conn = None
 
         iter_start.record()
@@ -139,14 +140,16 @@ def training(
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         ssim_value = ssim(image, gt_image, window)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + \
+            opt.lambda_dssim * (1.0 - ssim_value)
 
         # Side-by-side debug images
         if DEBUG:
             capture_frequency = 500
             if iteration % capture_frequency == 0:
                 save_debug_image(
-                    dataset.model_path, gt_image, image, f"debug_{iteration}.png"
+                    dataset.model_path, gt_image, image, f"debug_{
+                        iteration}.png"
                 )
 
         # Depth regularization
@@ -156,7 +159,8 @@ def training(
             mono_invdepth = viewpoint_cam.invdepthmap.cuda()
             depth_mask = viewpoint_cam.depth_mask.cuda()
 
-            Ll1depth_pure = torch.abs((invDepth - mono_invdepth) * depth_mask).mean()
+            Ll1depth_pure = torch.abs(
+                (invDepth - mono_invdepth) * depth_mask).mean()
             Ll1depth = depth_l1_weight(iteration) * Ll1depth_pure
             loss += Ll1depth
             Ll1depth = Ll1depth.item()
@@ -285,8 +289,10 @@ def training_report(
     train_test_exp,
 ):
     if tb_writer:
-        tb_writer.add_scalar("train_loss_patches/l1_loss", Ll1.item(), iteration)
-        tb_writer.add_scalar("train_loss_patches/total_loss", loss.item(), iteration)
+        tb_writer.add_scalar("train_loss_patches/l1_loss",
+                             Ll1.item(), iteration)
+        tb_writer.add_scalar(
+            "train_loss_patches/total_loss", loss.item(), iteration)
         tb_writer.add_scalar("iter_time", elapsed, iteration)
 
     # Report test and samples of training set
@@ -309,7 +315,8 @@ def training_report(
                 psnr_test = 0.0
                 for idx, viewpoint in enumerate(config["cameras"]):
                     image = torch.clamp(
-                        renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"],
+                        renderFunc(viewpoint, scene.gaussians,
+                                   *renderArgs)["render"],
                         0.0,
                         1.0,
                     )
@@ -317,8 +324,8 @@ def training_report(
                         viewpoint.original_image.to("cuda"), 0.0, 1.0
                     )
                     if train_test_exp:
-                        image = image[..., image.shape[-1] // 2 :]
-                        gt_image = gt_image[..., gt_image.shape[-1] // 2 :]
+                        image = image[..., image.shape[-1] // 2:]
+                        gt_image = gt_image[..., gt_image.shape[-1] // 2:]
                     if tb_writer and (idx < 5):
                         tb_writer.add_images(
                             config["name"]
@@ -344,10 +351,12 @@ def training_report(
                 )
                 if tb_writer:
                     tb_writer.add_scalar(
-                        config["name"] + "/loss_viewpoint - l1_loss", l1_test, iteration
+                        config["name"] +
+                        "/loss_viewpoint - l1_loss", l1_test, iteration
                     )
                     tb_writer.add_scalar(
-                        config["name"] + "/loss_viewpoint - psnr", psnr_test, iteration
+                        config["name"] +
+                        "/loss_viewpoint - psnr", psnr_test, iteration
                     )
 
         if tb_writer:
@@ -378,8 +387,9 @@ if __name__ == "__main__":
         "--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000]
     )
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--disable_viewer", action="store_true", default=False)
-    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
+    parser.add_argument("--disable_viewer", action="store_true", default=True)
+    parser.add_argument("--checkpoint_iterations",
+                        nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
