@@ -18,7 +18,6 @@ import torch
 
 class BasicPointCloud(NamedTuple):
     points: np.array
-    normals: np.array
     values: np.array
 
 
