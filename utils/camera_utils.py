@@ -29,17 +29,20 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
             ) / float(2**16)
         except FileNotFoundError:
             print(
-                f"Error: The depth file at path '{cam_info.depth_path}' was not found."
+                f"Error: The depth file at path '{
+                    cam_info.depth_path}' was not found."
             )
             raise
         except IOError:
             print(
-                f"Error: Unable to open the image file '{cam_info.depth_path}'. It may be corrupted or an unsupported format."
+                f"Error: Unable to open the image file '{
+                    cam_info.depth_path}'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
-                f"An unexpected error occurred when trying to read depth at {cam_info.depth_path}: {e}"
+                f"An unexpected error occurred when trying to read depth at {
+                    cam_info.depth_path}: {e}"
             )
             raise
     else:
@@ -56,7 +59,7 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
                 global WARNED
                 if not WARNED:
                     print(
-                        "[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
+                        "[ INFO ] Encountered quite large input images (>2.5K pixels width), rescaling to 2.5K.\n "
                         "If this is not desired, please explicitly specify '--resolution/-r' as 1"
                     )
                     WARNED = True
@@ -98,17 +101,20 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
             ) / float(2**16)
         except FileNotFoundError:
             print(
-                f"Error: The depth file at path '{cam_info.depth_path}' was not found."
+                f"Error: The depth file at path '{
+                    cam_info.depth_path}' was not found."
             )
             raise
         except IOError:
             print(
-                f"Error: Unable to open the image file '{cam_info.depth_path}'. It may be corrupted or an unsupported format."
+                f"Error: Unable to open the image file '{
+                    cam_info.depth_path}'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
-                f"An unexpected error occurred when trying to read depth at {cam_info.depth_path}: {e}"
+                f"An unexpected error occurred when trying to read depth at {
+                    cam_info.depth_path}: {e}"
             )
             raise
     else:

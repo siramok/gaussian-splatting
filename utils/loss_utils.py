@@ -83,3 +83,22 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
         return ssim_map.mean()
     else:
         return ssim_map.mean(1).mean(1).mean(1)
+
+
+def bounding_box_regularization(gaussians):
+    (min_x, max_x), (min_y, max_y), (min_z, max_z) = gaussians.bounding_box
+
+    xyz = gaussians._xyz
+    penalty_x = torch.clamp(xyz[:, 0] - max_x, min=0) + torch.clamp(
+        min_x - xyz[:, 0], min=0
+    )
+    penalty_y = torch.clamp(xyz[:, 1] - max_y, min=0) + torch.clamp(
+        min_y - xyz[:, 1], min=0
+    )
+    penalty_z = torch.clamp(xyz[:, 2] - max_z, min=0) + torch.clamp(
+        min_z - xyz[:, 2], min=0
+    )
+
+    total_penalty = penalty_x**2 + penalty_y**2 + penalty_z**2
+
+    return total_penalty.mean()
