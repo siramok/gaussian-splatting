@@ -39,7 +39,8 @@ class ParamGroup:
                     )
             else:
                 if t == bool:
-                    group.add_argument("--" + key, default=value, action="store_true")
+                    group.add_argument(
+                        "--" + key, default=value, action="store_true")
                 else:
                     group.add_argument("--" + key, default=value, type=t)
 
@@ -86,14 +87,15 @@ class OptimizationParams(ParamGroup):
         self.position_lr_max_steps = 30_000
         self.feature_lr = 0.0025
         self.opacity_lr = 0.025
-        self.scaling_lr = 0.005
-        self.rotation_lr = 0.001
+        self.scaling_lr = 0.001
+        self.rotation_lr = 0.0001
         self.exposure_lr_init = 0.01
         self.exposure_lr_final = 0.001
         self.exposure_lr_delay_steps = 0
         self.exposure_lr_delay_mult = 0.0
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
+        self.lambda_scaling = 0.00001
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500

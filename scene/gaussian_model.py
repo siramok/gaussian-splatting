@@ -9,6 +9,15 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+from utils.system_utils import mkdir_p
+from utils.graphics_utils import BasicPointCloud
+from utils.general_utils import (
+    build_rotation,
+    build_scaling_rotation,
+    get_expon_lr_func,
+    inverse_sigmoid,
+    strip_symmetric,
+)
 import json
 import os
 
@@ -19,16 +28,6 @@ from plyfile import PlyData, PlyElement
 from scipy.interpolate import NearestNDInterpolator
 from simple_knn._C import distCUDA2
 from torch import nn
-
-from utils.general_utils import (
-    build_rotation,
-    build_scaling_rotation,
-    get_expon_lr_func,
-    inverse_sigmoid,
-    strip_symmetric,
-)
-from utils.graphics_utils import BasicPointCloud
-from utils.system_utils import mkdir_p
 
 
 class GaussianModel:
@@ -63,10 +62,11 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.interpolator = None
-        self.interpolation_threshold = 0.001
+        self.interpolation_threshold = 0.05
         self.interpolation_mask = None
         self.last_interpolated_xyz = None
         self.should_interpolate = False
+        self.bounding_box = None
         self.setup_functions()
 
     def capture(self):
@@ -149,8 +149,10 @@ class GaussianModel:
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
 
-        print("Number of points at initialisation : ",
-              fused_point_cloud.shape[0])
+        print(
+            f"Number of points at initialisation : {
+              fused_point_cloud.shape[0]}"
+        )
 
         dist2 = torch.clamp_min(
             distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
@@ -181,19 +183,17 @@ class GaussianModel:
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
         }
         self.pretrained_exposures = None
-        exposure = torch.eye(3, 4, device="cuda")[
-            None].repeat(len(cam_infos), 1, 1)
+        exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
-        self.create_interpolator(mesh)
+        self.process_mesh(mesh)
         self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(self._xyz.shape[0], True)
         self.should_interpolate = True
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
-        self.xyz_gradient_accum = torch.zeros(
-            (self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         optimizer_params = [
@@ -277,9 +277,7 @@ class GaussianModel:
         ]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate(
-            (xyz, values, opacities, scale, rotation), axis=1
-        )
+        attributes = np.concatenate((xyz, values, opacities, scale, rotation), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
@@ -289,11 +287,9 @@ class GaussianModel:
 
     def reset_opacity(self):
         opacities_new = self.inverse_opacity_activation(
-            torch.min(self.get_opacity, torch.ones_like(
-                self.get_opacity) * 0.01)
+            torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.01)
         )
-        optimizable_tensors = self.replace_tensor_to_optimizer(
-            opacities_new, "opacity")
+        optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
     def load_ply(self, path, mesh, use_train_test_exp=False):
@@ -347,8 +343,7 @@ class GaussianModel:
         values = np.asarray(plydata.elements[0]["value"])[..., np.newaxis]
 
         self._xyz = nn.Parameter(
-            torch.tensor(xyz, dtype=torch.float,
-                         device="cuda").requires_grad_(True)
+            torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._opacity = nn.Parameter(
             torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(
@@ -356,18 +351,16 @@ class GaussianModel:
             )
         )
         self._scaling = nn.Parameter(
-            torch.tensor(scales, dtype=torch.float,
-                         device="cuda").requires_grad_(True)
+            torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._rotation = nn.Parameter(
-            torch.tensor(rots, dtype=torch.float,
-                         device="cuda").requires_grad_(True)
+            torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
             torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
         )
 
-        self.create_interpolator(mesh)
+        self.process_mesh(mesh)
         self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(len(self._values), True)
 
@@ -375,8 +368,7 @@ class GaussianModel:
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
-                stored_state = self.optimizer.state.get(
-                    group["params"][0], None)
+                stored_state = self.optimizer.state.get(group["params"][0], None)
                 stored_state["exp_avg"] = torch.zeros_like(tensor)
                 stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
@@ -424,8 +416,9 @@ class GaussianModel:
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
         self.last_interpolated_xyz = self.last_interpolated_xyz[valid_points_mask]
-        self.interpolation_mask = self.interpolation_mask[valid_points_mask.detach(
-        ).cpu().numpy()]
+        self.interpolation_mask = self.interpolation_mask[
+            valid_points_mask.detach().cpu().numpy()
+        ]
 
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
@@ -439,8 +432,7 @@ class GaussianModel:
                     (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
                 )
                 stored_state["exp_avg_sq"] = torch.cat(
-                    (stored_state["exp_avg_sq"],
-                     torch.zeros_like(extension_tensor)),
+                    (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
                     dim=0,
                 )
 
@@ -495,11 +487,19 @@ class GaussianModel:
 
             # Extend these tensors to avoid size mismatches during interpolation
             self.last_interpolated_xyz = torch.cat(
-                (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]), dim=0)
+                (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]),
+                dim=0,
+            )
             self._values = torch.cat(
-                (self._values, torch.tensor(
-                    np.zeros((new_size - old_size, 1)), dtype=torch.float, device="cuda")),
-                dim=0
+                (
+                    self._values,
+                    torch.tensor(
+                        np.zeros((new_size - old_size, 1)),
+                        dtype=torch.float,
+                        device="cuda",
+                    ),
+                ),
+                dim=0,
             )
 
         # Compute the distances between the new points and the last interpolated points
@@ -509,7 +509,8 @@ class GaussianModel:
 
         # If a Gaussian's position has moved more than the threshold, re-interpolate its value
         interpolation_mask[:old_size] = (
-            distances > self.interpolation_threshold).detach().cpu().numpy()
+            (distances > self.interpolation_threshold).detach().cpu().numpy()
+        )
 
         self.interpolation_mask = interpolation_mask
         # Only bother interpolating if there are any points that need updating
@@ -521,8 +522,7 @@ class GaussianModel:
         self._rotation = optimizable_tensors["rotation"]
         self._values = optimizable_tensors["value"]
 
-        self.xyz_gradient_accum = torch.zeros(
-            (self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -531,8 +531,7 @@ class GaussianModel:
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[: grads.shape[0]] = grads.squeeze()
-        selected_pts_mask = torch.where(
-            padded_grad >= grad_threshold, True, False)
+        selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
         selected_pts_mask = torch.logical_and(
             selected_pts_mask,
             torch.max(self.get_scaling, dim=1).values
@@ -542,8 +541,7 @@ class GaussianModel:
         stds = self.get_scaling[selected_pts_mask].repeat(N, 1)
         means = torch.zeros((stds.size(0), 3), device="cuda")
         samples = torch.normal(mean=means, std=stds)
-        rots = build_rotation(
-            self._rotation[selected_pts_mask]).repeat(N, 1, 1)
+        rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N, 1, 1)
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[
             selected_pts_mask
         ].repeat(N, 1)
@@ -565,8 +563,7 @@ class GaussianModel:
         prune_filter = torch.cat(
             (
                 selected_pts_mask,
-                torch.zeros(N * selected_pts_mask.sum(),
-                            device="cuda", dtype=bool),
+                torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool),
             )
         )
         self.prune_points(prune_filter)
@@ -620,14 +617,17 @@ class GaussianModel:
         )
         self.denom[update_filter] += 1
 
-    from plyfile import PlyData
-
-    def create_interpolator(self, mesh):
+    def process_mesh(self, mesh):
         points = mesh.points
         values = mesh.get_array("value").reshape(-1, 1)
         self.interpolator = NearestNDInterpolator(
             points, values, tree_options={"leafsize": 30}
         )
+
+        min_x, max_x = points[:, 0].min(), points[:, 0].max()
+        min_y, max_y = points[:, 1].min(), points[:, 1].max()
+        min_z, max_z = points[:, 2].min(), points[:, 2].max()
+        self.bounding_box = (min_x, max_x), (min_y, max_y), (min_z, max_z)
 
     def interpolate_new_values(self):
         # Return early if there are no new points to interpolate
@@ -640,7 +640,8 @@ class GaussianModel:
 
         interpolated_values = self._values.detach().cpu().numpy()
         interpolated_values[self.interpolation_mask] = self.interpolator(
-            gaussian_positions)
+            gaussian_positions
+        )
         interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
 
         new_values = torch.tensor(
@@ -650,13 +651,14 @@ class GaussianModel:
         self._values = nn.Parameter(new_values.requires_grad_(False))
 
         # Update the last interpolated positions, and reset the interpolation mask
-        self.last_interpolated_xyz[self.interpolation_mask] = self._xyz[self.interpolation_mask]
+        self.last_interpolated_xyz[self.interpolation_mask] = self._xyz[
+            self.interpolation_mask
+        ]
         self.interpolation_mask = np.full(self._xyz.shape[0], False)
         self.should_interpolate = False
 
     def convert_ply_to_ascii(self, binary_ply_file_path):
-        ascii_ply_file_path = binary_ply_file_path.replace(
-            ".ply", "_ascii.ply")
+        ascii_ply_file_path = binary_ply_file_path.replace(".ply", "_ascii.ply")
 
         ply_data = PlyData.read(binary_ply_file_path)
 
