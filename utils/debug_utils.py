@@ -2,6 +2,39 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+
+def tensor_to_vtk(tensor: np.ndarray, output_path: str, spacing=(1.0, 1.0, 1.0)):
+    # Get dimensions
+    nx, ny, nz = tensor.shape
+    
+    # Create the VTK file
+    with open(output_path, 'w') as f:
+        # Write header
+        f.write('# vtk DataFile Version 3.0\n')
+        f.write('3D Scalar Data\n')
+        f.write('ASCII\n')
+        f.write('DATASET STRUCTURED_POINTS\n')
+        
+        # Write dimensions
+        f.write(f'DIMENSIONS {nx} {ny} {nz}\n')
+        
+        # Write origin (starting at 0,0,0)
+        f.write('ORIGIN 0.0 0.0 0.0\n')
+        
+        # Write spacing
+        f.write(f'SPACING {spacing[0]} {spacing[1]} {spacing[2]}\n')
+        
+        # Write point data header
+        total_points = nx * ny * nz
+        f.write(f'POINT_DATA {total_points}\n')
+        f.write('SCALARS values float\n')
+        f.write('LOOKUP_TABLE default\n')
+        
+        # Write the actual data
+        # Flatten the array and write values one per line
+        for value in tensor.flatten():
+            f.write(f'{value}\n')
 
 
 def save_debug_image(path, gt_image, image, filename):

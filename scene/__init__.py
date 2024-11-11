@@ -45,11 +45,8 @@ class Scene:
                 self.loaded_iter = load_iteration
             print("Loading trained model at iteration {}".format(self.loaded_iter))
 
-        self.train_cameras = {}
-        self.test_cameras = {}
-
         if os.path.exists(os.path.join(args.source_path, "data.vtu")):
-            scene_info = readDirectSceneInfo(args.source_path, args.eval)
+            scene_info = readDirectSceneInfo(args.source_path)
         else:
             assert False, "Could not recognize scene type!"
 
@@ -58,36 +55,6 @@ class Scene:
                 os.path.join(self.model_path, "input.ply"), "wb"
             ) as dest_file:
                 dest_file.write(src_file.read())
-            json_cams = []
-            camlist = []
-            if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
-            if scene_info.train_cameras:
-                camlist.extend(scene_info.train_cameras)
-            for id, cam in enumerate(camlist):
-                json_cams.append(camera_to_JSON(id, cam))
-            with open(os.path.join(self.model_path, "cameras.json"), "w") as file:
-                json.dump(json_cams, file)
-
-        if shuffle:
-            random.shuffle(
-                scene_info.train_cameras
-            )  # Multi-res consistent random shuffling
-            random.shuffle(
-                scene_info.test_cameras
-            )  # Multi-res consistent random shuffling
-
-        self.cameras_extent = scene_info.nerf_normalization["radius"]
-
-        for resolution_scale in resolution_scales:
-            print("Loading Training Cameras")
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.train_cameras, resolution_scale, args, False
-            )
-            print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.test_cameras, resolution_scale, args, True
-            )
 
         if self.loaded_iter:
             self.gaussians.load_ply(
@@ -101,10 +68,9 @@ class Scene:
                 args.train_test_exp,
             )
         else:
+            self.gaussians.convert_ply_to_ascii(os.path.join(self.model_path, "input.ply"))
             self.gaussians.create_from_pcd(
                 scene_info.point_cloud,
-                scene_info.train_cameras,
-                self.cameras_extent,
                 scene_info.mesh,
             )
 
@@ -113,20 +79,3 @@ class Scene:
             self.model_path, f"point_cloud/iteration_{iteration}"
         )
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
-        exposure_dict = {
-            image_name: self.gaussians.get_exposure_from_name(image_name)
-            .detach()
-            .cpu()
-            .numpy()
-            .tolist()
-            for image_name in self.gaussians.exposure_mapping
-        }
-
-        with open(os.path.join(self.model_path, "exposure.json"), "w") as f:
-            json.dump(exposure_dict, f, indent=2)
-
-    def getTrainCameras(self, scale=1.0):
-        return self.train_cameras[scale]
-
-    def getTestCameras(self, scale=1.0):
-        return self.test_cameras[scale]

@@ -25,7 +25,7 @@ import numpy as np
 import pyvista as pv
 import torch
 from plyfile import PlyData, PlyElement
-from scipy.interpolate import NearestNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 from simple_knn._C import distCUDA2
 from torch import nn
 
@@ -124,16 +124,6 @@ class GaussianModel:
     def get_values(self):
         return self._values
 
-    @property
-    def get_exposure(self):
-        return self._exposure
-
-    def get_exposure_from_name(self, image_name):
-        if self.pretrained_exposures is None:
-            return self._exposure[self.exposure_mapping[image_name]]
-        else:
-            return self.pretrained_exposures[image_name]
-
     def get_covariance(self, scaling_modifier=1):
         return self.covariance_activation(
             self.get_scaling, scaling_modifier, self._rotation
@@ -142,12 +132,17 @@ class GaussianModel:
     def create_from_pcd(
         self,
         pcd: BasicPointCloud,
-        cam_infos: int,
-        spatial_lr_scale: float,
         mesh: pv.PolyData,
     ):
-        self.spatial_lr_scale = spatial_lr_scale
-        fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
+        # Define the percentage of points to keep
+        fraction = 0.5
+
+        # Generate random indices to keep 10% of the points
+        num_points = pcd.points.shape[0]
+        indices = np.random.choice(num_points, size=int(num_points * fraction), replace=False)
+        points_sampled = pcd.points[indices]
+        values_sampled = pcd.values.reshape(-1, 1)[indices]
+        fused_point_cloud = torch.tensor(np.asarray(points_sampled)).float().cuda()
 
         print(
             f"Number of points at initialisation : {
@@ -155,7 +150,7 @@ class GaussianModel:
         )
 
         dist2 = torch.clamp_min(
-            distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
+            distCUDA2(torch.from_numpy(np.asarray(points_sampled)).float().cuda()),
             0.0000001,
         )
         scales = torch.log(torch.sqrt(dist2))[..., None].repeat(1, 3)
@@ -169,9 +164,7 @@ class GaussianModel:
             )
         )
 
-        values = torch.tensor(pcd.values, dtype=torch.float, device="cuda").reshape(
-            -1, 1
-        )
+        values = torch.tensor(values_sampled, dtype=torch.float, device="cuda")
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
@@ -179,14 +172,8 @@ class GaussianModel:
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self._values = nn.Parameter(values.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-        self.exposure_mapping = {
-            cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
-        }
-        self.pretrained_exposures = None
-        exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
-        self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
-        self.process_mesh(mesh)
+        self.process_mesh(points_sampled, values_sampled)
         self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(self._xyz.shape[0], True)
         self.should_interpolate = True
@@ -199,7 +186,7 @@ class GaussianModel:
         optimizer_params = [
             {
                 "params": [self._xyz],
-                "lr": training_args.position_lr_init * self.spatial_lr_scale,
+                "lr": training_args.position_lr_init,
                 "name": "xyz",
             },
             {
@@ -217,7 +204,7 @@ class GaussianModel:
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
             },
-                        {
+            {
                 "params": [self._values],
                 "lr": training_args.values_lr,
                 "name": "value",
@@ -225,30 +212,16 @@ class GaussianModel:
         ]
 
         self.optimizer = torch.optim.Adam(optimizer_params, lr=0.0, eps=1e-15)
-        if self.pretrained_exposures is None:
-            self.exposure_optimizer = torch.optim.Adam([self._exposure])
 
         self.xyz_scheduler_args = get_expon_lr_func(
-            lr_init=training_args.position_lr_init * self.spatial_lr_scale,
-            lr_final=training_args.position_lr_final * self.spatial_lr_scale,
+            lr_init=training_args.position_lr_init,
+            lr_final=training_args.position_lr_final,
             lr_delay_mult=training_args.position_lr_delay_mult,
             max_steps=training_args.position_lr_max_steps,
         )
 
-        self.exposure_scheduler_args = get_expon_lr_func(
-            training_args.exposure_lr_init,
-            training_args.exposure_lr_final,
-            lr_delay_steps=training_args.exposure_lr_delay_steps,
-            lr_delay_mult=training_args.exposure_lr_delay_mult,
-            max_steps=training_args.iterations,
-        )
-
     def update_learning_rate(self, iteration):
         """Learning rate scheduling per step"""
-        if self.pretrained_exposures is None:
-            for param_group in self.exposure_optimizer.param_groups:
-                param_group["lr"] = self.exposure_scheduler_args(iteration)
-
         for param_group in self.optimizer.param_groups:
             if param_group["name"] == "xyz":
                 lr = self.xyz_scheduler_args(iteration)
@@ -294,23 +267,6 @@ class GaussianModel:
 
     def load_ply(self, path, mesh, use_train_test_exp=False):
         plydata = PlyData.read(path)
-        if use_train_test_exp:
-            exposure_file = os.path.join(
-                os.path.dirname(path), os.pardir, os.pardir, "exposure.json"
-            )
-            if os.path.exists(exposure_file):
-                with open(exposure_file, "r") as f:
-                    exposures = json.load(f)
-                self.pretrained_exposures = {
-                    image_name: torch.FloatTensor(exposures[image_name])
-                    .requires_grad_(False)
-                    .cuda()
-                    for image_name in exposures
-                }
-                print("Pretrained exposures loaded.")
-            else:
-                print(f"No exposure to be loaded at {exposure_file}")
-                self.pretrained_exposures = None
 
         xyz = np.stack(
             (
@@ -617,11 +573,9 @@ class GaussianModel:
         )
         self.denom[update_filter] += 1
 
-    def process_mesh(self, mesh):
-        points = mesh.points
-        values = mesh.get_array("value").reshape(-1, 1)
-        self.interpolator = NearestNDInterpolator(
-            points, values, tree_options={"leafsize": 30}
+    def process_mesh(self, points, values):
+        self.interpolator = LinearNDInterpolator(
+            points, values, fill_value=0.0
         )
 
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
