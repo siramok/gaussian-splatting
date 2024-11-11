@@ -64,7 +64,7 @@ class Scene:
                     "iteration_" + str(self.loaded_iter),
                     "point_cloud.ply",
                 ),
-                scene_info.mesh,
+                scene_info.point_cloud,
                 args.train_test_exp,
             )
         else:

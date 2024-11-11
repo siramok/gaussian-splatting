@@ -125,10 +125,12 @@ def training(
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
 
             if iteration % 500 == 0:
+                mse = torch.mean((cells - gt) ** 2)
+                psnr = 20 * torch.log10(torch.tensor(1.0)) - 10 * torch.log10(mse + 1e-8)
                 progress_bar.set_postfix(
                     {
                         "Loss": f"{ema_loss_for_log:.{7}f}",
-                        # "SSIM": f"{ssim_value.item():.{7}f}",
+                        "PSNR": f"{psnr:.{7}f}",
                         # "Scaling": f"{scaling_modifier * scaling_loss.item():.{7}f}",
                         # "Bound": f"{bound_loss.item():.{7}f}",
                     }

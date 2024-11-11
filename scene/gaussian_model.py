@@ -135,7 +135,7 @@ class GaussianModel:
         mesh: pv.PolyData,
     ):
         # Define the percentage of points to keep
-        fraction = 0.5
+        fraction = 1.0
 
         # Generate random indices to keep 10% of the points
         num_points = pcd.points.shape[0]
@@ -265,7 +265,7 @@ class GaussianModel:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path, mesh, use_train_test_exp=False):
+    def load_ply(self, path, pcd, use_train_test_exp=False):
         plydata = PlyData.read(path)
 
         xyz = np.stack(
@@ -316,7 +316,7 @@ class GaussianModel:
             torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
         )
 
-        self.process_mesh(mesh)
+        self.process_mesh(pcd.points, pcd.values.reshape(-1, 1))
         self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(len(self._values), True)
 
