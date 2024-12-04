@@ -45,27 +45,52 @@ def training(
 ):
     first_iter = 0
     gaussians = GaussianModel()
-    scene = Scene(dataset, gaussians, load_iteration=-1)
+    scene = Scene(dataset, gaussians, load_iteration=-1, normalize=True)
 
     # Make ground truth
-    v = np.linspace(0.01, 0.99, 50)
-    x, y, z = np.meshgrid(v, v, v, indexing='ij')
-    samples = np.vstack([x.ravel(), y.ravel(), z.ravel()]).T
-    gt_cells = gaussians.interpolator(x.ravel(), y.ravel(), z.ravel()).reshape(50, 50, 50)
-    flipped_tensor = np.flip(gt_cells, axis=1)
-    rotated_tensor = np.rot90(flipped_tensor, k=1, axes=(2, 0))
-    tensor_to_vtk(rotated_tensor, "test_gt.vtk")
-    gt = torch.tensor(rotated_tensor.copy()).cuda()
+    cell_size = 0.02
+    num_cells = [
+        int(np.ceil((gaussians.maxes[0] - gaussians.mins[0]) / cell_size)),
+        int(np.ceil((gaussians.maxes[1] - gaussians.mins[1]) / cell_size)),
+        int(np.ceil((gaussians.maxes[2] - gaussians.mins[2]) / cell_size))
+    ]
+    v1 = np.flip(np.arange(gaussians.mins[0] + cell_size/2, 
+                      gaussians.mins[0] + cell_size * num_cells[0],
+                      cell_size))
+    v2 = np.flip(np.arange(gaussians.mins[1] + cell_size/2, 
+                      gaussians.mins[1] + cell_size * num_cells[1],
+                      cell_size))
+    v3 = np.arange(gaussians.mins[2] + cell_size/2, 
+                      gaussians.mins[2] + cell_size * num_cells[2],
+                      cell_size)
+    print(gaussians._xyz.detach().cpu().numpy().shape)
+    print(v1.shape)
+    print(num_cells)
+    z, y, x = np.meshgrid(v3, v2, v1, indexing='ij')
+    samples = np.stack((x.ravel(), y.ravel(), z.ravel()), axis=1)
+    # print(x)
+    # print(samples.shape)
+    # print(samples)
+    gt_cells = gaussians.interpolator(samples).reshape(num_cells)
+    # print(gt_cells.shape)
+    # print(gt_cells)
+    # flipped_tensor = np.flip(gt_cells, axis=1)
+    # rotated_tensor = np.rot90(gt_cells, k=1, axes=(2, 0))
+    tensor_to_vtk(gt_cells, "test_gt.vtk")
+    gt = torch.tensor(gt_cells.copy()).cuda()
 
+    pipe.debug = True
     render_pkg = render(
         gaussians,
-        pipe
+        pipe,
+        cell_size
     )
     cells, visibility_filter, radii = (
         render_pkg["cells"],
         render_pkg["visibility_filter"],
         render_pkg["radii"],
     )
+    print(cells.shape)
 
     l1_l = l1_loss(cells, gt)
     mse = torch.mean((cells - gt) ** 2)
@@ -73,6 +98,7 @@ def training(
     print(f"L1 loss: {l1_l.item()}")
     print(f"L2 loss: {mse}")
     print(f"PSNR: {psnr}")
+    tensor_to_vtk(cells.detach().cpu().numpy(), f"test.vtk")
 
 if __name__ == "__main__":
     window = create_window()

@@ -265,9 +265,12 @@ class GaussianModel:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path, pcd, use_train_test_exp=False):
+    def load_ply(self, path, pcd, normalize=False, use_train_test_exp=False):
         plydata = PlyData.read(path)
-
+        print(
+            f"Number of points at initialisation : {
+              plydata.elements[0]["x"].shape[0]}"
+        )
         xyz = np.stack(
             (
                 np.asarray(plydata.elements[0]["x"]),
@@ -276,6 +279,24 @@ class GaussianModel:
             ),
             axis=1,
         )
+        if normalize:
+            xyz[:,0] = (xyz[:,0] + 1) / 2
+            xyz[:,1] = (xyz[:,1] + 1) / 2
+            xyz[:,2] = (xyz[:,2] - 2) / 2
+        self.mins = [
+            xyz[:,0].min(),
+            xyz[:,1].min(),
+            xyz[:,2].min()
+        ]
+        self.maxes = [
+            xyz[:,0].max(),
+            xyz[:,1].max(),
+            xyz[:,2].max()
+        ]
+        # self.mins = [0,0,0]
+        # self.maxes = [1,1,1]
+        print(self.mins)
+        print(self.maxes)
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
 
         scale_names = [

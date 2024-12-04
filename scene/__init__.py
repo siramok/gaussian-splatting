@@ -29,6 +29,7 @@ class Scene:
         args: ModelParams,
         gaussians: GaussianModel,
         load_iteration=None,
+        normalize=False,
         shuffle=True,
         resolution_scales=[1.0],
     ):
@@ -57,6 +58,12 @@ class Scene:
                 dest_file.write(src_file.read())
 
         if self.loaded_iter:
+            self.gaussians.convert_ply_to_ascii(os.path.join(
+                self.model_path,
+                "point_cloud",
+                "iteration_" + str(self.loaded_iter),
+                "point_cloud.ply",
+            ))
             self.gaussians.load_ply(
                 os.path.join(
                     self.model_path,
@@ -65,6 +72,7 @@ class Scene:
                     "point_cloud.ply",
                 ),
                 scene_info.point_cloud,
+                normalize,
                 args.train_test_exp,
             )
         else:
