@@ -14,14 +14,13 @@ import os
 import random
 
 from arguments import ModelParams
-from scene.dataset_readers import readDirectSceneInfo
+from scene.dataset_readers import readRawSceneInfo, readVtuSceneInfo
 from scene.gaussian_model import GaussianModel
 from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
 from utils.system_utils import searchForMaxIteration
 
 
 class Scene:
-
     gaussians: GaussianModel
 
     def __init__(
@@ -48,15 +47,21 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
+        raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
         if os.path.exists(os.path.join(args.source_path, "data.vtu")):
-            scene_info = readDirectSceneInfo(args.source_path, args.eval)
+            scene_info = readVtuSceneInfo(args.source_path, args.eval)
+        elif len(raw_files) == 1:
+            scene_info = readRawSceneInfo(args.source_path, raw_files[0], args.eval)
         else:
-            assert False, "Could not recognize scene type!"
+            raise FileNotFoundError(
+                "Could not recognize scene type! Ensure either a preprocessed dataset or raw data is available."
+            )
 
         if not self.loaded_iter:
-            with open(scene_info.ply_path, "rb") as src_file, open(
-                os.path.join(self.model_path, "input.ply"), "wb"
-            ) as dest_file:
+            with (
+                open(scene_info.ply_path, "rb") as src_file,
+                open(os.path.join(self.model_path, "input.ply"), "wb") as dest_file,
+            ):
                 dest_file.write(src_file.read())
             json_cams = []
             camlist = []

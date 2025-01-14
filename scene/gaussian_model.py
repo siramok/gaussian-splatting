@@ -31,7 +31,6 @@ from torch import nn
 
 
 class GaussianModel:
-
     def setup_functions(self):
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
             L = build_scaling_rotation(scaling_modifier * scaling, rotation)
@@ -149,10 +148,7 @@ class GaussianModel:
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
 
-        print(
-            f"Number of points at initialisation : {
-              fused_point_cloud.shape[0]}"
-        )
+        print(f"Number of points at initialisation : {fused_point_cloud.shape[0]}")
 
         dist2 = torch.clamp_min(
             distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
@@ -427,7 +423,6 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
-
                 stored_state["exp_avg"] = torch.cat(
                     (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
                 )
@@ -618,6 +613,9 @@ class GaussianModel:
         self.denom[update_filter] += 1
 
     def process_mesh(self, mesh):
+        if mesh is None:
+            return
+
         points = mesh.points
         values = mesh.get_array("value").reshape(-1, 1)
         self.interpolator = NearestNDInterpolator(
@@ -631,7 +629,7 @@ class GaussianModel:
 
     def interpolate_new_values(self):
         # Return early if there are no new points to interpolate
-        if not self.should_interpolate:
+        if self.interpolator is None or not self.should_interpolate:
             return
 
         # Filter out the positions that need to be interpolated

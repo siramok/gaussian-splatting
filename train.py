@@ -26,6 +26,7 @@ from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
+from utils.scaling_regularizer import ScalingRegularizer
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -142,8 +143,14 @@ def training(
 
         ssim_value = piq.multi_scale_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
 
-        scaling_loss = torch.mean(1.0 / torch.exp(gaussians._scaling))
-        scaling_modifier = opt.lambda_scaling * torch.sigmoid(scaling_loss - 450).item()
+        scaling_config = {
+            "lambda_scaling": opt.lambda_scaling,
+            "method": "l2_norm",
+            "threshold": 450,
+        }
+
+        regularizer = ScalingRegularizer(**scaling_config)
+        scaling_loss = regularizer.compute_loss(gaussians)
 
         bound_loss = bounding_box_regularization(gaussians)
 
@@ -151,7 +158,7 @@ def training(
         loss = (
             (1.0 - opt.lambda_dssim) * Ll1
             + opt.lambda_dssim * (1.0 - ssim_value)
-            + scaling_modifier * scaling_loss
+            + scaling_loss
             + bound_loss
         )
 
@@ -163,8 +170,7 @@ def training(
                     dataset.model_path,
                     gt_image,
                     image,
-                    f"debug_{
-                        iteration}.png",
+                    f"debug_{iteration}.png",
                 )
 
         # Depth regularization
@@ -195,7 +201,7 @@ def training(
                     {
                         "Loss": f"{ema_loss_for_log:.{7}f}",
                         "SSIM": f"{ssim_value.item():.{7}f}",
-                        "Scaling": f"{scaling_modifier * scaling_loss.item():.{7}f}",
+                        "Scaling": f"{scaling_loss:.{7}f}",
                         "Bound": f"{bound_loss.item():.{7}f}",
                         "Depth": f"{ema_Ll1depth_for_log:.{7}f}",
                     }
