@@ -617,7 +617,7 @@ class GaussianModel:
             return
 
         points = mesh.points
-        values = mesh.get_array("value").reshape(-1, 1)
+        values = mesh.get_array(mesh.array_names[0]).reshape(-1, 1)
         self.interpolator = NearestNDInterpolator(
             points, values, tree_options={"leafsize": 30}
         )

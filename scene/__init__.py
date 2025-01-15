@@ -48,7 +48,7 @@ class Scene:
         self.test_cameras = {}
 
         raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
-        if os.path.exists(os.path.join(args.source_path, "data.vtu")):
+        if os.path.exists(os.path.join(args.source_path, "data.vti")):
             scene_info = readVtuSceneInfo(args.source_path, args.eval)
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(args.source_path, raw_files[0], args.eval)

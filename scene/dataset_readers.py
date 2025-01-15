@@ -228,12 +228,15 @@ def buildRawDataset(path, filename):
     if values.size != dimensions[0] * dimensions[1] * dimensions[2]:
         raise ValueError("Data size does not match the specified dimensions.")
 
-    # Reshape data into a 3D array
-    values = values.reshape(dimensions)
+    # Reshape data into a 3D array and normalize to [0, 1]
+    values = values.astype(np.float32).reshape(dimensions)
+    values_min = values.min()
+    values_max = values.max()
+    values = (values - values_min) / (values_max - values_min)
     mesh = pv.ImageData()
     mesh.dimensions = np.array(dimensions)
     mesh.spacing = (1, 1, 1)
-    mesh.point_data["value"] = values.ravel(order="F")
+    mesh.point_data["value"] = values.ravel(order="F").astype(np.float32)
 
     colormap = LinearSegmentedColormap.from_list(
         "CustomColormap",
@@ -368,15 +371,16 @@ def buildVtuDataset(path):
     # print(pv.get_gpu_info())
 
     # Mesh loading
-    mesh = pv.read(os.path.join(path, "data.vtu"))
+    mesh = pv.read(os.path.join(path, "data.vti"))
     print(f"Mesh size: {len(mesh.points)} points")
+    array_name = mesh.array_names[0]
 
     # Value rescaling
-    values = mesh.get_array("value").reshape(-1, 1)
+    values = mesh.get_array(array_name).astype(np.float32).reshape(-1, 1)
     values_min = values.min()
     values_max = values.max()
     values = (values - values_min) / (values_max - values_min)
-    mesh.get_array("value")[:] = values.ravel()
+    mesh.point_data[array_name] = values.ravel().astype(np.float32)
 
     # Point scaling
     points_min = np.min(mesh.points, axis=0)
@@ -385,7 +389,7 @@ def buildVtuDataset(path):
 
     if points_max_abs > 1:
         scale_factor = -1.0 / points_max_abs
-        mesh.scale(scale_factor, inplace=True)
+        mesh.scale(scale_factor)
 
     colormap = LinearSegmentedColormap.from_list(
         "CustomColormap",
@@ -402,7 +406,7 @@ def buildVtuDataset(path):
     pl.add_volume(
         mesh,
         show_scalar_bar=False,
-        scalars="value",
+        scalars=array_name,
         cmap=colormap,
         opacity=0.5,
     )
@@ -412,7 +416,7 @@ def buildVtuDataset(path):
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
     offset[2] -= 3
     offset = [-x for x in offset]
-    mesh.translate(offset, inplace=True)
+    mesh.translate(offset)
 
     # Reset the camera position and focal point, since we translated the mesh
     pl.view_xy()
@@ -496,14 +500,11 @@ def buildVtuDataset(path):
 
     pl.close()
 
-    # dropout_percentage = 0.1
-    # mesh_dropout, values_dropout = random_dropout(mesh, values, dropout_percentage)
-    # mesh_dropout.point_data["value"] = values_dropout.ravel()
-
-    mesh_dropout, values_dropout = density_based_dropout(
-        mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
-    )
-    mesh_dropout.point_data["value"] = values_dropout.ravel()
+    # mesh_dropout, values_dropout = density_based_dropout(
+    #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
+    # )
+    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.95)
+    mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
     storePly(
