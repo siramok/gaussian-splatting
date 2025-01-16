@@ -197,7 +197,7 @@ def buildRawDataset(path, filename):
     os.makedirs(image_dir)
 
     # Window setup
-    width = 1600
+    width = 900
     height = 900
     ratio = width / height
     pv.start_xvfb()
@@ -238,6 +238,22 @@ def buildRawDataset(path, filename):
     mesh.spacing = (1, 1, 1)
     mesh.point_data["value"] = values.ravel(order="F").astype(np.float32)
 
+    # Point scaling
+    points_min = np.min(mesh.points, axis=0)
+    points_max = np.max(mesh.points, axis=0)
+    points_max_abs = max(np.max(np.abs(points_min)), np.max(np.abs(points_max)))
+
+    if points_max_abs > 1:
+        scale_factor = 1.0 / points_max_abs
+        mesh.spacing = (scale_factor, scale_factor, scale_factor)
+
+    # Get the focal point so that we can translate the mesh to the origin
+    offset = list(pl.camera.focal_point)
+    # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
+    offset[2] -= 3
+    offset = [-x for x in offset]
+    mesh.origin = offset
+
     colormap = LinearSegmentedColormap.from_list(
         "CustomColormap",
         [
@@ -255,7 +271,7 @@ def buildRawDataset(path, filename):
         show_scalar_bar=False,
         scalars="value",
         cmap=colormap,
-        opacity=0.5,
+        opacity=0.01,
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -340,7 +356,7 @@ def buildRawDataset(path, filename):
 
     pl.close()
 
-    dropout_percentage = 0.95
+    dropout_percentage = 0.9999
     mesh_dropout, values_dropout = random_dropout_raw(mesh, values, dropout_percentage)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
@@ -362,7 +378,7 @@ def buildVtuDataset(path):
     os.makedirs(image_dir)
 
     # Window setup
-    width = 1600
+    width = 900
     height = 900
     ratio = width / height
     pv.start_xvfb()
