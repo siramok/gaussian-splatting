@@ -389,14 +389,14 @@ def buildVtuDataset(path):
 
     if points_max_abs > 1:
         scale_factor = -1.0 / points_max_abs
-        mesh = mesh.scale(scale_factor)
+        mesh.scale(scale_factor, inplace=True)
 
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
     offset[2] -= 3
     offset = [-x for x in offset]
-    mesh = mesh.translate(offset)
+    mesh.translate(offset, inplace=True)
 
     colormap = LinearSegmentedColormap.from_list(
         "CustomColormap",
@@ -410,12 +410,13 @@ def buildVtuDataset(path):
         ],
     )
 
+
     pl.add_volume(
         mesh,
         show_scalar_bar=False,
         scalars=array_name,
         cmap=colormap,
-        opacity=0.5,
+        opacity=0.01,
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -503,7 +504,7 @@ def buildVtuDataset(path):
     # mesh_dropout, values_dropout = density_based_dropout(
     #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
     # )
-    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.5)
+    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.9999)
     mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
