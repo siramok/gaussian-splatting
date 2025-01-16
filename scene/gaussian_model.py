@@ -173,7 +173,7 @@ class GaussianModel:
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._values = nn.Parameter(values.requires_grad_(True))
+        self._values = nn.Parameter(values.requires_grad_(False))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
         self.exposure_mapping = {
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
@@ -353,7 +353,7 @@ class GaussianModel:
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(True)
+            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(False)
         )
 
         self.process_mesh(mesh)
@@ -364,12 +364,13 @@ class GaussianModel:
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
+                requires_grad = False if group["name"] == "value" else True
                 stored_state = self.optimizer.state.get(group["params"][0], None)
                 stored_state["exp_avg"] = torch.zeros_like(tensor)
                 stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
                 del self.optimizer.state[group["params"][0]]
-                group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
+                group["params"][0] = nn.Parameter(tensor.requires_grad_(requires_grad))
                 self.optimizer.state[group["params"][0]] = stored_state
 
                 optimizable_tensors[group["name"]] = group["params"][0]
@@ -378,6 +379,7 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            requires_grad = False if group["name"] == "value" else True
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -385,14 +387,14 @@ class GaussianModel:
 
                 del self.optimizer.state[group["params"][0]]
                 group["params"][0] = nn.Parameter(
-                    (group["params"][0][mask].requires_grad_(True))
+                    (group["params"][0][mask].requires_grad_(requires_grad))
                 )
                 self.optimizer.state[group["params"][0]] = stored_state
 
                 optimizable_tensors[group["name"]] = group["params"][0]
             else:
                 group["params"][0] = nn.Parameter(
-                    group["params"][0][mask].requires_grad_(True)
+                    group["params"][0][mask].requires_grad_(requires_grad)
                 )
                 optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
@@ -419,6 +421,7 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            requires_grad = False if group["name"] == "value" else True
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
@@ -435,7 +438,7 @@ class GaussianModel:
                 group["params"][0] = nn.Parameter(
                     torch.cat(
                         (group["params"][0], extension_tensor), dim=0
-                    ).requires_grad_(True)
+                    ).requires_grad_(requires_grad)
                 )
                 self.optimizer.state[group["params"][0]] = stored_state
 
@@ -444,7 +447,7 @@ class GaussianModel:
                 group["params"][0] = nn.Parameter(
                     torch.cat(
                         (group["params"][0], extension_tensor), dim=0
-                    ).requires_grad_(True)
+                    ).requires_grad_(requires_grad)
                 )
                 optimizable_tensors[group["name"]] = group["params"][0]
 
