@@ -48,7 +48,7 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-    def __init__(self):
+    def __init__(self, train_opacity=False, train_values=False):
         self._xyz = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
@@ -66,6 +66,8 @@ class GaussianModel:
         self.last_interpolated_xyz = None
         self.should_interpolate = False
         self.bounding_box = None
+        self.train_opacity = train_opacity
+        self.train_values = train_values
         self.setup_functions()
 
     def capture(self):
@@ -172,8 +174,8 @@ class GaussianModel:
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
-        self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._values = nn.Parameter(values.requires_grad_(False))
+        self._opacity = nn.Parameter(opacities.requires_grad_(self.train_opacity))
+        self._values = nn.Parameter(values.requires_grad_(self.train_values))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
         self.exposure_mapping = {
             cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)
@@ -343,7 +345,7 @@ class GaussianModel:
         )
         self._opacity = nn.Parameter(
             torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(
-                True
+                self.train_opacity
             )
         )
         self._scaling = nn.Parameter(
@@ -353,7 +355,7 @@ class GaussianModel:
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(False)
+            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(self.train_values)
         )
 
         self.process_mesh(mesh)
@@ -364,7 +366,11 @@ class GaussianModel:
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
-                requires_grad = False if group["name"] == "value" else True
+                requires_grad = True
+                if group["name"] == "opacity":
+                    requires_grad = self.train_opacity    
+                if group["name"] == "value":
+                    requires_grad = self.train_values
                 stored_state = self.optimizer.state.get(group["params"][0], None)
                 stored_state["exp_avg"] = torch.zeros_like(tensor)
                 stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
@@ -379,7 +385,11 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            requires_grad = False if group["name"] == "value" else True
+            requires_grad = True
+            if group["name"] == "opacity":
+                requires_grad = self.train_opacity    
+            if group["name"] == "value":
+                requires_grad = self.train_values
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -421,7 +431,11 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            requires_grad = False if group["name"] == "value" else True
+            requires_grad = True
+            if group["name"] == "opacity":
+                requires_grad = self.train_opacity    
+            if group["name"] == "value":
+                requires_grad = self.train_values
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
@@ -621,6 +635,8 @@ class GaussianModel:
 
         points = mesh.points
         values = mesh.get_array(mesh.array_names[0]).reshape(-1, 1)
+        if (values < 0).any():
+            print("some values are 0??")
         self.interpolator = NearestNDInterpolator(
             points, values, tree_options={"leafsize": 30}
         )
@@ -640,16 +656,22 @@ class GaussianModel:
         gaussian_positions = gaussian_positions[self.interpolation_mask]
 
         interpolated_values = self._values.detach().cpu().numpy()
-        interpolated_values[self.interpolation_mask] = self.interpolator(
+        itp = self.interpolator(
             gaussian_positions
         )
+        if (itp < 0).any():
+            print("Interpolation gave a negative value???")
+        if (interpolated_values < 0).any():
+            print("Some values are negative??")
+        interpolated_values[self.interpolation_mask] = itp
         interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
+
 
         new_values = torch.tensor(
             interpolated_values, dtype=torch.float, device="cuda"
         ).reshape(-1, 1)
 
-        self._values = nn.Parameter(new_values.requires_grad_(False))
+        self._values = nn.Parameter(new_values.requires_grad_(self.train_values))
 
         # Update the last interpolated positions, and reset the interpolation mask
         self.last_interpolated_xyz[self.interpolation_mask] = self._xyz[

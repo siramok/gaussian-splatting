@@ -50,7 +50,7 @@ def training(
 ):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel()
+    gaussians = GaussianModel(opt.train_opacity, opt.train_values)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     if checkpoint:
@@ -107,6 +107,9 @@ def training(
                     break
             except Exception:
                 network_gui.conn = None
+
+        if (iteration == 1 or not opt.train_values):
+            gaussians.interpolate_new_values()
 
         iter_start.record()
 
@@ -207,7 +210,7 @@ def training(
                     }
                 )
                 progress_bar.update(500)
-                print("")
+                print(f"\n Number of Gaussians: {gaussians.get_values.shape[0]}")
             if iteration == opt.iterations:
                 progress_bar.close()
 
@@ -253,10 +256,10 @@ def training(
                         size_threshold,
                     )
 
-                # if iteration % opt.opacity_reset_interval == 0 or (
-                #     dataset.white_background and iteration == opt.densify_from_iter
-                # ):
-                #     gaussians.reset_opacity()
+                if (iteration % opt.opacity_reset_interval == 0 and opt.train_opacity) or (
+                    dataset.white_background and iteration == opt.densify_from_iter
+                ):
+                    gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -264,8 +267,6 @@ def training(
                 gaussians.exposure_optimizer.zero_grad(set_to_none=True)
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none=True)
-
-            gaussians.interpolate_new_values()
 
             if iteration in checkpoint_iterations:
                 print(f"\n[ITER {iteration}] Saving Checkpoint")
@@ -399,10 +400,10 @@ if __name__ == "__main__":
     parser.add_argument("--debug_from", type=int, default=-1)
     parser.add_argument("--detect_anomaly", action="store_true", default=False)
     parser.add_argument(
-        "--test_iterations", nargs="+", type=int, default=[7_000, 30_000]
+        "--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 5_000, 10_000]
     )
     parser.add_argument(
-        "--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000]
+        "--save_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000]
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)

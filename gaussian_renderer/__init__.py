@@ -83,11 +83,13 @@ def render(
         rotations = pc.get_rotation
 
     values = pc.get_values
+    opacities = pc.get_opacity
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen).
     rendered_image, radii, depth_image = rasterizer(
         means3D=means3D,
         means2D=means2D,
+        opacities=opacities,
         scales=scales,
         rotations=rotations,
         values=values,

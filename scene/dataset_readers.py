@@ -271,7 +271,7 @@ def buildRawDataset(path, filename):
         show_scalar_bar=False,
         scalars="value",
         cmap=colormap,
-        opacity=0.01,
+        opacity=max(0.004, 1.0 / min(dimensions)),
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -356,7 +356,7 @@ def buildRawDataset(path, filename):
 
     pl.close()
 
-    dropout_percentage = 0.9999
+    dropout_percentage = 0.999
     mesh_dropout, values_dropout = random_dropout_raw(mesh, values, dropout_percentage)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
