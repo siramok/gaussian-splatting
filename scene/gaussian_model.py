@@ -46,6 +46,9 @@ class GaussianModel:
         self.opacity_activation = torch.sigmoid
         self.inverse_opacity_activation = inverse_sigmoid
 
+        self.values_activation = torch.sigmoid
+        self.inverse_values_activation = inverse_sigmoid
+
         self.rotation_activation = torch.nn.functional.normalize
 
     def __init__(self, train_opacity=False, train_values=False):
@@ -123,7 +126,7 @@ class GaussianModel:
 
     @property
     def get_values(self):
-        return self._values
+        return self.values_activation(self._values)
 
     @property
     def get_exposure(self):
@@ -167,8 +170,10 @@ class GaussianModel:
             )
         )
 
-        values = torch.tensor(pcd.values, dtype=torch.float, device="cuda").reshape(
-            -1, 1
+        values = self.inverse_values_activation(
+            torch.tensor(pcd.values, dtype=torch.float, device="cuda").reshape(
+                -1, 1
+            )
         )
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
@@ -505,11 +510,11 @@ class GaussianModel:
             self._values = torch.cat(
                 (
                     self._values,
-                    torch.tensor(
+                    self.inverse_values_activation(torch.tensor(
                         np.zeros((new_size - old_size, 1)),
                         dtype=torch.float,
                         device="cuda",
-                    ),
+                    )),
                 ),
                 dim=0,
             )
@@ -655,7 +660,7 @@ class GaussianModel:
         gaussian_positions = self._xyz.detach().cpu().numpy()
         gaussian_positions = gaussian_positions[self.interpolation_mask]
 
-        interpolated_values = self._values.detach().cpu().numpy()
+        interpolated_values = self.get_values.detach().cpu().numpy()
         itp = self.interpolator(
             gaussian_positions
         )
@@ -667,9 +672,9 @@ class GaussianModel:
         interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
 
 
-        new_values = torch.tensor(
+        new_values = self.inverse_values_activation(torch.tensor(
             interpolated_values, dtype=torch.float, device="cuda"
-        ).reshape(-1, 1)
+        ).reshape(-1, 1))
 
         self._values = nn.Parameter(new_values.requires_grad_(self.train_values))
 
