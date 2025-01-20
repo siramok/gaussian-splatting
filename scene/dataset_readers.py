@@ -232,7 +232,7 @@ def buildRawDataset(path, filename, colormap):
     values = values.astype(np.float32).reshape(dimensions)
     values_min = values.min()
     values_max = values.max()
-    values = 0.01 + 0.98 * (values - values_min) / (values_max - values_min)
+    values = (values - values_min) / (values_max - values_min)
 
     mesh = pv.ImageData()
     mesh.dimensions = np.array(dimensions)
@@ -384,7 +384,7 @@ def buildVtuDataset(path, colormap):
     values = mesh.get_array(array_name).astype(np.float32).reshape(-1, 1)
     values_min = values.min()
     values_max = values.max()
-    values = 0.01 + 0.98 * (values - values_min) / (values_max - values_min)
+    values = (values - values_min) / (values_max - values_min)
     mesh.point_data[array_name] = values.ravel().astype(np.float32)
 
     # Point scaling
