@@ -207,7 +207,7 @@ class GaussianModel:
             },
             {
                 "params": [self._opacity],
-                "lr": training_args.opacity_lr,
+                "lr": training_args.opacity_lr if self.train_opacity else 0.0,
                 "name": "opacity",
             },
             {
@@ -222,7 +222,7 @@ class GaussianModel:
             },
                         {
                 "params": [self._values],
-                "lr": training_args.values_lr,
+                "lr": training_args.values_lr if self.train_values else 0.0,
                 "name": "value",
             },
         ]
