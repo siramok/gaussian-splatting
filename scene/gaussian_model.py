@@ -171,9 +171,7 @@ class GaussianModel:
         )
 
         values = self.inverse_values_activation(
-            torch.tensor(pcd.values, dtype=torch.float, device="cuda").reshape(
-                -1, 1
-            )
+            torch.tensor(pcd.values, dtype=torch.float, device="cuda").reshape(-1, 1)
         )
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
@@ -207,7 +205,7 @@ class GaussianModel:
             },
             {
                 "params": [self._opacity],
-                "lr": training_args.opacity_lr if self.train_opacity else 0.0,
+                "lr": training_args.opacity_lr,
                 "name": "opacity",
             },
             {
@@ -220,9 +218,9 @@ class GaussianModel:
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
             },
-                        {
+            {
                 "params": [self._values],
-                "lr": training_args.values_lr if self.train_values else 0.0,
+                "lr": training_args.values_lr,
                 "name": "value",
             },
         ]
@@ -360,7 +358,9 @@ class GaussianModel:
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._values = nn.Parameter(
-            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(self.train_values)
+            torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(
+                self.train_values
+            )
         )
 
         self.process_mesh(mesh)
@@ -373,7 +373,7 @@ class GaussianModel:
             if group["name"] == name:
                 requires_grad = True
                 if group["name"] == "opacity":
-                    requires_grad = self.train_opacity    
+                    requires_grad = self.train_opacity
                 if group["name"] == "value":
                     requires_grad = self.train_values
                 stored_state = self.optimizer.state.get(group["params"][0], None)
@@ -392,7 +392,7 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             requires_grad = True
             if group["name"] == "opacity":
-                requires_grad = self.train_opacity    
+                requires_grad = self.train_opacity
             if group["name"] == "value":
                 requires_grad = self.train_values
             stored_state = self.optimizer.state.get(group["params"][0], None)
@@ -438,7 +438,7 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             requires_grad = True
             if group["name"] == "opacity":
-                requires_grad = self.train_opacity    
+                requires_grad = self.train_opacity
             if group["name"] == "value":
                 requires_grad = self.train_values
             assert len(group["params"]) == 1
@@ -473,19 +473,14 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(
-        self,
-        new_xyz,
-        new_opacities,
-        new_scaling,
-        new_rotation,
-        new_values
+        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values
     ):
         d = {
             "xyz": new_xyz,
             "opacity": new_opacities,
             "scaling": new_scaling,
             "rotation": new_rotation,
-            "value": new_values
+            "value": new_values,
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
@@ -510,11 +505,13 @@ class GaussianModel:
             self._values = torch.cat(
                 (
                     self._values,
-                    self.inverse_values_activation(torch.tensor(
-                        np.zeros((new_size - old_size, 1)),
-                        dtype=torch.float,
-                        device="cuda",
-                    )),
+                    self.inverse_values_activation(
+                        torch.tensor(
+                            np.zeros((new_size - old_size, 1)),
+                            dtype=torch.float,
+                            device="cuda",
+                        )
+                    ),
                 ),
                 dim=0,
             )
@@ -570,11 +567,7 @@ class GaussianModel:
         new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
-            new_xyz,
-            new_opacity,
-            new_scaling,
-            new_rotation,
-            new_values
+            new_xyz, new_opacity, new_scaling, new_rotation, new_values
         )
 
         prune_filter = torch.cat(
@@ -661,9 +654,7 @@ class GaussianModel:
         gaussian_positions = gaussian_positions[self.interpolation_mask]
 
         interpolated_values = self.get_values.detach().cpu().numpy()
-        itp = self.interpolator(
-            gaussian_positions
-        )
+        itp = self.interpolator(gaussian_positions)
         if (itp < 0).any():
             print("Interpolation gave a negative value???")
         if (interpolated_values < 0).any():
@@ -671,10 +662,11 @@ class GaussianModel:
         interpolated_values[self.interpolation_mask] = itp
         interpolated_values = np.nan_to_num(interpolated_values, nan=0.0)
 
-
-        new_values = self.inverse_values_activation(torch.tensor(
-            interpolated_values, dtype=torch.float, device="cuda"
-        ).reshape(-1, 1))
+        new_values = self.inverse_values_activation(
+            torch.tensor(interpolated_values, dtype=torch.float, device="cuda").reshape(
+                -1, 1
+            )
+        )
 
         self._values = nn.Parameter(new_values.requires_grad_(self.train_values))
 

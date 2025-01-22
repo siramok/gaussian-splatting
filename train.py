@@ -9,6 +9,7 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+from ast import parse
 import os
 import sys
 import uuid
@@ -24,6 +25,7 @@ from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
+from utils.graphics_utils import create_colormap
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.scaling_regularizer import ScalingRegularizer
@@ -62,6 +64,8 @@ def training(
     else:
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    colormap_table, derivatives = create_colormap(dataset.colormap)
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -108,7 +112,7 @@ def training(
             except Exception:
                 network_gui.conn = None
 
-        if (iteration == 1 or not opt.train_values):
+        if iteration == 1 or not opt.train_values:
             gaussians.interpolate_new_values()
 
         iter_start.record()
@@ -131,6 +135,8 @@ def training(
             gaussians,
             pipe,
             background,
+            colormap_table,
+            derivatives,
             use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
@@ -225,7 +231,7 @@ def training(
                 testing_iterations,
                 scene,
                 render,
-                (pipe, background),
+                (pipe, background, colormap_table, derivatives),
                 dataset.train_test_exp,
             )
             if iteration in saving_iterations:
@@ -256,9 +262,9 @@ def training(
                         size_threshold,
                     )
 
-                if (iteration % opt.opacity_reset_interval == 0 and opt.train_opacity) or (
-                    dataset.white_background and iteration == opt.densify_from_iter
-                ):
+                if (
+                    iteration % opt.opacity_reset_interval == 0 and opt.train_opacity
+                ) or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
             # Optimizer step

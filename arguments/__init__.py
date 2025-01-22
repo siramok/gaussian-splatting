@@ -39,8 +39,7 @@ class ParamGroup:
                     )
             else:
                 if t == bool:
-                    group.add_argument(
-                        "--" + key, default=value, action="store_true")
+                    group.add_argument("--" + key, default=value, action="store_true")
                 else:
                     group.add_argument("--" + key, default=value, type=t)
 
@@ -63,6 +62,7 @@ class ModelParams(ParamGroup):
         self.train_test_exp = False
         self.data_device = "cuda"
         self.eval = False
+        self.colormap = "viridis"
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

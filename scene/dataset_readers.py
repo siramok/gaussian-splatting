@@ -189,7 +189,7 @@ def storeRawPly(path, mesh, values):
     ply_data.write(path)
 
 
-def buildRawDataset(path, filename):
+def buildRawDataset(path, filename, colormap):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -232,7 +232,8 @@ def buildRawDataset(path, filename):
     values = values.astype(np.float32).reshape(dimensions)
     values_min = values.min()
     values_max = values.max()
-    values = (values - values_min) / (values_max - values_min)
+    values = 0.01 + 0.98 * (values - values_min) / (values_max - values_min)
+
     mesh = pv.ImageData()
     mesh.dimensions = np.array(dimensions)
     mesh.spacing = (1, 1, 1)
@@ -253,18 +254,6 @@ def buildRawDataset(path, filename):
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.origin = offset
-
-    colormap = LinearSegmentedColormap.from_list(
-        "CustomColormap",
-        [
-            (1.0, 0.0, 0.0),  # Red
-            (1.0, 1.0, 0.0),  # Yellow
-            (0.0, 1.0, 0.0),  # Green
-            (0.0, 1.0, 1.0),  # Cyan
-            (0.0, 0.0, 1.0),  # Blue
-            (1.0, 0.0, 1.0),  # Pink
-        ],
-    )
 
     pl.add_volume(
         mesh,
@@ -370,7 +359,7 @@ def buildRawDataset(path, filename):
     return cam_infos, mesh
 
 
-def buildVtuDataset(path):
+def buildVtuDataset(path, colormap):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -395,7 +384,7 @@ def buildVtuDataset(path):
     values = mesh.get_array(array_name).astype(np.float32).reshape(-1, 1)
     values_min = values.min()
     values_max = values.max()
-    values = (values - values_min) / (values_max - values_min)
+    values = 0.01 + 0.98 * (values - values_min) / (values_max - values_min)
     mesh.point_data[array_name] = values.ravel().astype(np.float32)
 
     # Point scaling
@@ -414,25 +403,12 @@ def buildVtuDataset(path):
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
-    colormap = LinearSegmentedColormap.from_list(
-        "CustomColormap",
-        [
-            (1.0, 0.0, 0.0),  # Red
-            (1.0, 1.0, 0.0),  # Yellow
-            (0.0, 1.0, 0.0),  # Green
-            (0.0, 1.0, 1.0),  # Cyan
-            (0.0, 0.0, 1.0),  # Blue
-            (1.0, 0.0, 1.0),  # Pink
-        ],
-    )
-
-
     pl.add_volume(
         mesh,
         show_scalar_bar=False,
         scalars=array_name,
         cmap=colormap,
-        opacity=0.01,
+        opacity=0.5,
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -517,10 +493,10 @@ def buildVtuDataset(path):
 
     pl.close()
 
-    # mesh_dropout, values_dropout = density_based_dropout(
-    #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
-    # )
-    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.9999)
+    mesh_dropout, values_dropout = density_based_dropout(
+        mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
+    )
+    # mesh_dropout, values_dropout = random_dropout(mesh, values, 0.9999)
     mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
@@ -556,8 +532,8 @@ def getDirectppNorm(cam_info):
     return {"translate": translate, "radius": radius}
 
 
-def readRawSceneInfo(path, filename, eval, llffhold=8):
-    cam_infos, mesh = buildRawDataset(path, filename)
+def readRawSceneInfo(path, filename, colormap, eval, llffhold=8):
+    cam_infos, mesh = buildRawDataset(path, filename, colormap)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -587,8 +563,8 @@ def readRawSceneInfo(path, filename, eval, llffhold=8):
     return scene_info
 
 
-def readVtuSceneInfo(path, eval, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path)
+def readVtuSceneInfo(path, colormap, eval, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormap)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]

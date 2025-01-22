@@ -14,6 +14,7 @@ from typing import NamedTuple
 
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 
 class BasicPointCloud(NamedTuple):
@@ -82,3 +83,38 @@ def fov2focal(fov, pixels):
 
 def focal2fov(focal, pixels):
     return 2 * math.atan(pixels / (2 * focal))
+
+
+def create_colormap(name="viridis", num_points=256):
+    try:
+        # Get the colormap from matplotlib
+        cmap = plt.cm.get_cmap(name)
+
+        # Generate control points in the range [0, 1]
+        control_points = np.linspace(0.0, 1.0, num_points)
+
+        # Get RGBA colors for each control point
+        colors = cmap(control_points)[:, :3]  # Only take RGB (discard alpha)
+
+        # Convert to float16 for GPU efficiency
+        colormap_table = torch.tensor(colors, dtype=torch.float32).to("cuda")
+
+        # Precompute derivatives
+        derivatives = np.zeros_like(colors, dtype=np.float32)
+        for i in range(1, num_points - 1):
+            lower_diff = colors[i] - colors[i - 1]
+            upper_diff = colors[i + 1] - colors[i]
+            derivatives[i] = (lower_diff + upper_diff) / 2.0
+
+        # Use forward/backward differences at boundaries
+        derivatives[0] = colors[1] - colors[0]
+        derivatives[-1] = colors[-1] - colors[-2]
+
+        # Convert derivatives to float16 and GPU tensor
+        colormap_derivatives = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+
+        return colormap_table, colormap_derivatives
+
+    except Exception as e:
+        print(f"Error in create_colormap: {e}")
+        raise
