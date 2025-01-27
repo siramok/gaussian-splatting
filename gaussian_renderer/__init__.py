@@ -25,8 +25,9 @@ def render(
     pc: GaussianModel,
     pipe,
     bg_color: torch.Tensor,
-    colormap_table: torch.Tensor,
-    derivatives: torch.Tensor,
+    colormap_id: int,
+    colormap_tables: torch.Tensor,
+    derivative_tables: torch.Tensor,
     scaling_modifier=1.0,
     override_color=None,
     use_trained_exp=False,
@@ -65,8 +66,9 @@ def render(
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
         debug=pipe.debug,
-        colormap=colormap_table,
-        derivatives=derivatives,
+        colormap_id=colormap_id,
+        colormap_tables=colormap_tables,
+        derivative_tables=derivative_tables,
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)

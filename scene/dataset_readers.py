@@ -49,6 +49,7 @@ class CameraInfo(NamedTuple):
     mvt_matrix: np.array
     proj_matrix: np.array
     center: np.array
+    colormap_id: int
 
 
 class SceneInfo(NamedTuple):
@@ -189,7 +190,7 @@ def storeRawPly(path, mesh, values):
     ply_data.write(path)
 
 
-def buildRawDataset(path, filename, colormap):
+def buildRawDataset(path, filename, colormaps):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -197,8 +198,8 @@ def buildRawDataset(path, filename, colormap):
     os.makedirs(image_dir)
 
     # Window setup
-    width = 900
-    height = 900
+    width = 1600
+    height = 1600
     ratio = width / height
     pv.start_xvfb()
     pl = pv.Plotter(off_screen=True)
@@ -255,93 +256,96 @@ def buildRawDataset(path, filename, colormap):
     offset = [-x for x in offset]
     mesh.origin = offset
 
-    pl.add_volume(
-        mesh,
-        show_scalar_bar=False,
-        scalars="value",
-        cmap=colormap,
-        opacity=max(0.004, 1.0 / min(dimensions)),
-    )
-
-    # Reset the camera position and focal point, since we translated the mesh
-    pl.view_xy()
-    pl.background_color = "black"
-    pl.camera.clipping_range = (0.001, 1000.0)
-    camera = pl.camera
-
-    # Controls the camera orbit and capture frequency
-    print("Generating images from data.raw")
-    azimuth_steps = 36
-    elevation_steps = 7
-    azimuth_range = range(0, 360, 360 // azimuth_steps)
-    # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
-    elevation_range = range(-35, 35, 70 // elevation_steps)
-
     cam_infos = []
     image_counter = 0
-    for elevation in elevation_range:
-        for azimuth in azimuth_range:
-            # Set new azimuth and elevation
-            camera.elevation = elevation
-            camera.azimuth = azimuth
 
-            # Produce a new render at the new camera position
-            pl.render()
+    for colormap_id, colormap in enumerate(colormaps):
+        pl.add_volume(
+            mesh,
+            show_scalar_bar=False,
+            scalars="value",
+            cmap=colormap,
+            opacity=max(0.004, 1.0 / min(dimensions)),
+        )
 
-            # Save the render as a new image
-            image_name = f"img_{image_counter:05d}.png"
-            image_path = os.path.join(image_dir, image_name)
-            pl.screenshot(image_path)
+        # Reset the camera position and focal point, since we translated the mesh
+        pl.view_xy()
+        pl.background_color = "black"
+        pl.camera.clipping_range = (0.001, 1000.0)
+        camera = pl.camera
 
-            mvt_matrix = np.linalg.inv(
-                arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
-            )
+        # Controls the camera orbit and capture frequency
+        print(f"Generating images using {colormap} colormap")
+        azimuth_steps = 36
+        elevation_steps = 7
+        azimuth_range = range(0, 360, 360 // azimuth_steps)
+        # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
+        elevation_range = range(-35, 35, 70 // elevation_steps)
 
-            # Not sure why this is necessary
-            mvt_matrix[:3, 1:3] *= -1
+        for elevation in elevation_range:
+            for azimuth in azimuth_range:
+                # Set new azimuth and elevation
+                camera.elevation = elevation
+                camera.azimuth = azimuth
 
-            R = mvt_matrix[:3, :3].T
-            T = mvt_matrix[:3, 3]
+                # Produce a new render at the new camera position
+                pl.render()
 
-            FovY = np.radians(camera.view_angle)
-            FovX = focal2fov(fov2focal(FovY, height), width)
+                # Save the render as a new image
+                image_name = f"{colormap}_{image_counter:05d}.png"
+                image_path = os.path.join(image_dir, image_name)
+                pl.screenshot(image_path)
 
-            proj_matrix = arrayFromVTKMatrix(
-                camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
-            )
+                mvt_matrix = np.linalg.inv(
+                    arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
+                )
 
-            # Not sure why this is necessary
-            proj_matrix[1, :] = -proj_matrix[1, :]
-            proj_matrix[2, :] = -proj_matrix[2, :]
+                # Not sure why this is necessary
+                mvt_matrix[:3, 1:3] *= -1
 
-            # Not sure why this is necessary
-            y = camera.position[1]
-            if y < 0:
-                mvt_matrix[2, 1] *= -1
-            mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+                R = mvt_matrix[:3, :3].T
+                T = mvt_matrix[:3, 3]
 
-            center = mvt_matrix[:3, 3]
+                FovY = np.radians(camera.view_angle)
+                FovX = focal2fov(fov2focal(FovY, height), width)
 
-            cam_info = CameraInfo(
-                uid=image_counter,
-                R=R,
-                T=T,
-                FovY=FovY,
-                FovX=FovX,
-                depth_params=None,
-                image_path=image_path,
-                image_name=image_name,
-                depth_path="",
-                width=width,
-                height=height,
-                is_test=False,
-                mvt_matrix=mvt_matrix,
-                proj_matrix=proj_matrix,
-                center=center,
-            )
-            cam_infos.append(cam_info)
+                proj_matrix = arrayFromVTKMatrix(
+                    camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
+                )
 
-            image_counter += 1
+                # Not sure why this is necessary
+                proj_matrix[1, :] = -proj_matrix[1, :]
+                proj_matrix[2, :] = -proj_matrix[2, :]
+
+                # Not sure why this is necessary
+                y = camera.position[1]
+                if y < 0:
+                    mvt_matrix[2, 1] *= -1
+                mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+
+                center = mvt_matrix[:3, 3]
+
+                cam_info = CameraInfo(
+                    uid=image_counter,
+                    R=R,
+                    T=T,
+                    FovY=FovY,
+                    FovX=FovX,
+                    depth_params=None,
+                    image_path=image_path,
+                    image_name=image_name,
+                    depth_path="",
+                    width=width,
+                    height=height,
+                    is_test=False,
+                    mvt_matrix=mvt_matrix,
+                    proj_matrix=proj_matrix,
+                    center=center,
+                    colormap_id=colormap_id,
+                )
+                cam_infos.append(cam_info)
+
+                image_counter += 1
 
     pl.close()
 
@@ -359,7 +363,7 @@ def buildRawDataset(path, filename, colormap):
     return cam_infos, mesh
 
 
-def buildVtuDataset(path, colormap):
+def buildVtuDataset(path, colormaps):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -403,93 +407,96 @@ def buildVtuDataset(path, colormap):
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
-    pl.add_volume(
-        mesh,
-        show_scalar_bar=False,
-        scalars=array_name,
-        cmap=colormap,
-        opacity=0.5,
-    )
-
-    # Reset the camera position and focal point, since we translated the mesh
-    pl.view_xy()
-    pl.background_color = "black"
-    pl.camera.clipping_range = (0.001, 1000.0)
-    camera = pl.camera
-
-    # Controls the camera orbit and capture frequency
-    print("Generating images from data.vtu")
-    azimuth_steps = 36
-    elevation_steps = 7
-    azimuth_range = range(0, 360, 360 // azimuth_steps)
-    # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
-    elevation_range = range(-35, 35, 70 // elevation_steps)
-
     cam_infos = []
     image_counter = 0
-    for elevation in elevation_range:
-        for azimuth in azimuth_range:
-            # Set new azimuth and elevation
-            camera.elevation = elevation
-            camera.azimuth = azimuth
 
-            # Produce a new render at the new camera position
-            pl.render()
+    for colormap_id, colormap in enumerate(colormaps):
+        pl.add_volume(
+            mesh,
+            show_scalar_bar=False,
+            scalars=array_name,
+            cmap=colormap,
+            opacity=0.5,
+        )
 
-            # Save the render as a new image
-            image_name = f"img_{image_counter:05d}.png"
-            image_path = os.path.join(image_dir, image_name)
-            pl.screenshot(image_path)
+        # Reset the camera position and focal point, since we translated the mesh
+        pl.view_xy()
+        pl.background_color = "black"
+        pl.camera.clipping_range = (0.001, 1000.0)
+        camera = pl.camera
 
-            mvt_matrix = np.linalg.inv(
-                arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
-            )
+        # Controls the camera orbit and capture frequency
+        print(f"Generating images using {colormap} colormap")
+        azimuth_steps = 36
+        elevation_steps = 7
+        azimuth_range = range(0, 360, 360 // azimuth_steps)
+        # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
+        elevation_range = range(-35, 35, 70 // elevation_steps)
 
-            # Not sure why this is necessary
-            mvt_matrix[:3, 1:3] *= -1
+        for elevation in elevation_range:
+            for azimuth in azimuth_range:
+                # Set new azimuth and elevation
+                camera.elevation = elevation
+                camera.azimuth = azimuth
 
-            R = mvt_matrix[:3, :3].T
-            T = mvt_matrix[:3, 3]
+                # Produce a new render at the new camera position
+                pl.render()
 
-            FovY = np.radians(camera.view_angle)
-            FovX = focal2fov(fov2focal(FovY, height), width)
+                # Save the render as a new image
+                image_name = f"{colormap}_{image_counter:05d}.png"
+                image_path = os.path.join(image_dir, image_name)
+                pl.screenshot(image_path)
 
-            proj_matrix = arrayFromVTKMatrix(
-                camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
-            )
+                mvt_matrix = np.linalg.inv(
+                    arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
+                )
 
-            # Not sure why this is necessary
-            proj_matrix[1, :] = -proj_matrix[1, :]
-            proj_matrix[2, :] = -proj_matrix[2, :]
+                # Not sure why this is necessary
+                mvt_matrix[:3, 1:3] *= -1
 
-            # Not sure why this is necessary
-            y = camera.position[1]
-            if y < 0:
-                mvt_matrix[2, 1] *= -1
-            mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+                R = mvt_matrix[:3, :3].T
+                T = mvt_matrix[:3, 3]
 
-            center = mvt_matrix[:3, 3]
+                FovY = np.radians(camera.view_angle)
+                FovX = focal2fov(fov2focal(FovY, height), width)
 
-            cam_info = CameraInfo(
-                uid=image_counter,
-                R=R,
-                T=T,
-                FovY=FovY,
-                FovX=FovX,
-                depth_params=None,
-                image_path=image_path,
-                image_name=image_name,
-                depth_path="",
-                width=width,
-                height=height,
-                is_test=False,
-                mvt_matrix=mvt_matrix,
-                proj_matrix=proj_matrix,
-                center=center,
-            )
-            cam_infos.append(cam_info)
+                proj_matrix = arrayFromVTKMatrix(
+                    camera.GetCompositeProjectionTransformMatrix(ratio, 0.001, 1000.0)
+                )
 
-            image_counter += 1
+                # Not sure why this is necessary
+                proj_matrix[1, :] = -proj_matrix[1, :]
+                proj_matrix[2, :] = -proj_matrix[2, :]
+
+                # Not sure why this is necessary
+                y = camera.position[1]
+                if y < 0:
+                    mvt_matrix[2, 1] *= -1
+                mvt_matrix[2, 3] = abs(mvt_matrix[2, 3])
+
+                center = mvt_matrix[:3, 3]
+
+                cam_info = CameraInfo(
+                    uid=image_counter,
+                    R=R,
+                    T=T,
+                    FovY=FovY,
+                    FovX=FovX,
+                    depth_params=None,
+                    image_path=image_path,
+                    image_name=image_name,
+                    depth_path="",
+                    width=width,
+                    height=height,
+                    is_test=False,
+                    mvt_matrix=mvt_matrix,
+                    proj_matrix=proj_matrix,
+                    center=center,
+                    colormap_id=colormap_id,
+                )
+                cam_infos.append(cam_info)
+
+                image_counter += 1
 
     pl.close()
 
@@ -532,8 +539,8 @@ def getDirectppNorm(cam_info):
     return {"translate": translate, "radius": radius}
 
 
-def readRawSceneInfo(path, filename, colormap, eval, llffhold=8):
-    cam_infos, mesh = buildRawDataset(path, filename, colormap)
+def readRawSceneInfo(path, filename, colormaps, eval, llffhold=8):
+    cam_infos, mesh = buildRawDataset(path, filename, colormaps)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -563,8 +570,8 @@ def readRawSceneInfo(path, filename, colormap, eval, llffhold=8):
     return scene_info
 
 
-def readVtuSceneInfo(path, colormap, eval, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path, colormap)
+def readVtuSceneInfo(path, colormaps, eval, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormaps)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]

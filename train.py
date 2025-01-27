@@ -25,7 +25,7 @@ from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
-from utils.graphics_utils import create_colormap
+from utils.graphics_utils import create_colormaps, validate_colormaps
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.scaling_regularizer import ScalingRegularizer
@@ -65,7 +65,7 @@ def training(
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    colormap_table, derivatives = create_colormap(dataset.colormap)
+    colormap_tables, derivative_tables = create_colormaps(dataset.colormaps)
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -135,8 +135,9 @@ def training(
             gaussians,
             pipe,
             background,
-            colormap_table,
-            derivatives,
+            viewpoint_cam.colormap_id,
+            colormap_tables,
+            derivative_tables,
             use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
@@ -179,7 +180,7 @@ def training(
                     dataset.model_path,
                     gt_image,
                     image,
-                    f"debug_{iteration}.png",
+                    f"debug_{iteration}_cmap_id_{viewpoint_cam.colormap_id}.png",
                 )
 
         # Depth regularization
@@ -231,7 +232,13 @@ def training(
                 testing_iterations,
                 scene,
                 render,
-                (pipe, background, colormap_table, derivatives),
+                (
+                    pipe,
+                    background,
+                    viewpoint_cam.colormap_id,
+                    colormap_tables,
+                    derivative_tables,
+                ),
                 dataset.train_test_exp,
             )
             if iteration in saving_iterations:
@@ -428,8 +435,10 @@ if __name__ == "__main__":
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
+    dataset = lp.extract(args)
+    dataset.colormaps = validate_colormaps(dataset.colormaps)
     training(
-        lp.extract(args),
+        dataset,
         op.extract(args),
         pp.extract(args),
         args.test_iterations,

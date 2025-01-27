@@ -62,7 +62,8 @@ class ModelParams(ParamGroup):
         self.train_test_exp = False
         self.data_device = "cuda"
         self.eval = False
-        self.colormap = "viridis"
+        self.colormaps = "viridis"
+        self.colormap_ids = [0]
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

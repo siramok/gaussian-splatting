@@ -85,33 +85,44 @@ def focal2fov(focal, pixels):
     return 2 * math.atan(pixels / (2 * focal))
 
 
-def create_colormap(name="viridis", num_points=32):
+def validate_colormaps(colormaps):
+    validated_maps = []
+    for cmap in colormaps.split(","):
+        if cmap not in plt.colormaps():
+            raise ValueError(f"Invalid colormap: {cmap}")
+        validated_maps.append(cmap)
+
+    if not validated_maps:
+        print("No valid colormaps found")
+        raise
+
+    return validated_maps
+
+
+def create_colormaps(cmap_names, num_points=32):
     try:
-        # Get the colormap from matplotlib
-        cmap = plt.cm.get_cmap(name)
+        # Preallocate numpy arrays
+        num_colormaps = len(cmap_names)
+        tables = np.zeros((num_colormaps, num_points, 3), dtype=np.float32)
+        derivatives = np.zeros((num_colormaps, num_points, 3), dtype=np.float32)
 
-        # Generate control points in the range [0, 1]
-        control_points = np.linspace(0.0, 1.0, num_points)
+        for i, name in enumerate(cmap_names):
+            cmap = plt.cm.get_cmap(name)
+            control_points = np.linspace(0.0, 1.0, num_points)
 
-        # Get RGBA colors for each control point
-        colors = cmap(control_points)[:, :3]  # Only take RGB (discard alpha)
+            # Get colors
+            colors = cmap(control_points)[:, :3]
+            tables[i] = colors
 
-        # Convert to float32 for GPU efficiency
-        colormap_table = torch.tensor(colors, dtype=torch.float32).to("cuda")
+            # Compute derivatives
+            derivatives[i, :-1] = (colors[1:] - colors[:-1]) * (num_points - 1)
+            derivatives[i, -1] = 0
 
-        # Precompute derivatives
-        derivatives = np.zeros_like(colors, dtype=np.float32)
-        for i in range(num_points - 1):
-            derivatives[i] = (colors[i + 1] - colors[i]) * (num_points - 1)
-
-        # Only n-1 intervals when n points between [0,1]
-        derivatives[-1] = 0
-
-        # Convert derivatives to float32 and GPU tensor
-        colormap_derivatives = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-
-        return colormap_table, colormap_derivatives
+        return (
+            torch.as_tensor(tables, dtype=torch.float32, device="cuda"),
+            torch.as_tensor(derivatives, dtype=torch.float32, device="cuda"),
+        )
 
     except Exception as e:
-        print(f"Error in create_colormap: {e}")
+        print(f"Error creating {len(cmap_names)} colormaps: {e}")
         raise
