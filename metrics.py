@@ -23,6 +23,7 @@ from lpipsPyTorch import lpips
 from utils.image_utils import psnr
 from utils.loss_utils import l1_loss, ssim
 from utils.ms_ssim import ms_ssim
+from utils.debug_utils import save_debug_image
 
 
 def readImages(renders_dir, gt_dir):
@@ -87,6 +88,12 @@ def evaluate(model_paths):
                     ms_ssims.append(ms_ssim(renders[idx], gts[idx]))
                     psnrs.append(psnr(renders[idx], gts[idx]))
                     lpipss.append(lpips(renders[idx], gts[idx], net_type="vgg"))
+                    save_debug_image(
+                        scene_dir,
+                        gts[idx][0],
+                        renders[idx][0],
+                        f"debug_{idx}.png",
+                    )
 
                 print("  L1 : {:>12.7f}".format(torch.tensor(l1s).mean(), ".5"))
                 print("  SSIM : {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
