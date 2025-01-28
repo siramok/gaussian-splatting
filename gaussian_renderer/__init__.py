@@ -27,6 +27,8 @@ def render(
     bg_color: torch.Tensor,
     colormap_table: torch.Tensor,
     derivatives: torch.Tensor,
+    opacity_table: torch.Tensor,
+    opac_derivatives: torch.Tensor,
     scaling_modifier=1.0,
     override_color=None,
     use_trained_exp=False,
@@ -67,6 +69,8 @@ def render(
         debug=pipe.debug,
         colormap=colormap_table,
         derivatives=derivatives,
+        opacitymap=opacity_table,
+        opac_derivatives=opac_derivatives,
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)

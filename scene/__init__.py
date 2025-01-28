@@ -27,6 +27,7 @@ class Scene:
         self,
         args: ModelParams,
         gaussians: GaussianModel,
+        opacity_table,
         load_iteration=None,
         shuffle=True,
         resolution_scales=[1.0],
@@ -34,6 +35,7 @@ class Scene:
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
+        opacitymap = opacity_table.cpu().numpy()
 
         if load_iteration:
             if load_iteration == -1:
@@ -48,11 +50,11 @@ class Scene:
         self.test_cameras = {}
 
         raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
-        if os.path.exists(os.path.join(args.source_path, "data.vtu")):
-            scene_info = readVtuSceneInfo(args.source_path, args.colormap, args.eval)
+        if os.path.exists(os.path.join(args.source_path, "data.vtui")):
+            scene_info = readVtuSceneInfo(args.source_path, args.colormap, opacitymap, args.eval)
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
-                args.source_path, raw_files[0], args.colormap, args.eval
+                args.source_path, raw_files[0], args.colormap, opacitymap, args.eval
             )
         else:
             raise FileNotFoundError(

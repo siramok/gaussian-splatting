@@ -25,7 +25,7 @@ from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
-from utils.graphics_utils import create_colormap
+from utils.graphics_utils import create_colormap, create_opacitymap
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.scaling_regularizer import ScalingRegularizer
@@ -51,9 +51,11 @@ def training(
     debug_from,
 ):
     first_iter = 0
+    colormap_table, derivatives = create_colormap(dataset.colormap)
+    opacity_table, opac_derivatives = create_opacitymap()
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
-    scene = Scene(dataset, gaussians)
+    scene = Scene(dataset, gaussians, opacity_table)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -64,8 +66,6 @@ def training(
     else:
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
-    colormap_table, derivatives = create_colormap(dataset.colormap)
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -137,6 +137,8 @@ def training(
             background,
             colormap_table,
             derivatives,
+            opacity_table,
+            opac_derivatives,
             use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
@@ -231,7 +233,7 @@ def training(
                 testing_iterations,
                 scene,
                 render,
-                (pipe, background, colormap_table, derivatives),
+                (pipe, background, colormap_table, derivatives, opacity_table, opac_derivatives),
                 dataset.train_test_exp,
             )
             if iteration in saving_iterations:
@@ -406,10 +408,10 @@ if __name__ == "__main__":
     parser.add_argument("--debug_from", type=int, default=-1)
     parser.add_argument("--detect_anomaly", action="store_true", default=False)
     parser.add_argument(
-        "--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 5_000, 10_000]
+        "--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 5_000, 10_000, 20_000, 50_000]
     )
     parser.add_argument(
-        "--save_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000]
+        "--save_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000, 20_000, 50_000]
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)

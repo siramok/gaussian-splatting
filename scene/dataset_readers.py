@@ -189,7 +189,7 @@ def storeRawPly(path, mesh, values):
     ply_data.write(path)
 
 
-def buildRawDataset(path, filename, colormap):
+def buildRawDataset(path, filename, colormap, opacitymap):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -260,7 +260,8 @@ def buildRawDataset(path, filename, colormap):
         show_scalar_bar=False,
         scalars="value",
         cmap=colormap,
-        opacity=max(0.004, 1.0 / min(dimensions)),
+        # opacity=max(0.004, 1.0 / min(dimensions)),
+        opacity=opacitymap * 255,
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -359,7 +360,7 @@ def buildRawDataset(path, filename, colormap):
     return cam_infos, mesh
 
 
-def buildVtuDataset(path, colormap):
+def buildVtuDataset(path, colormap, opacitymap):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -408,7 +409,7 @@ def buildVtuDataset(path, colormap):
         show_scalar_bar=False,
         scalars=array_name,
         cmap=colormap,
-        opacity=0.5,
+        opacity=opacitymap * 255,
     )
 
     # Reset the camera position and focal point, since we translated the mesh
@@ -532,8 +533,8 @@ def getDirectppNorm(cam_info):
     return {"translate": translate, "radius": radius}
 
 
-def readRawSceneInfo(path, filename, colormap, eval, llffhold=8):
-    cam_infos, mesh = buildRawDataset(path, filename, colormap)
+def readRawSceneInfo(path, filename, colormap, opacitymap, eval, llffhold=8):
+    cam_infos, mesh = buildRawDataset(path, filename, colormap, opacitymap)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -563,8 +564,8 @@ def readRawSceneInfo(path, filename, colormap, eval, llffhold=8):
     return scene_info
 
 
-def readVtuSceneInfo(path, colormap, eval, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path, colormap)
+def readVtuSceneInfo(path, colormap, opacitymap, eval, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormap, opacitymap)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
