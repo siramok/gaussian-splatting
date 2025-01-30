@@ -64,7 +64,7 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.interpolator = None
-        self.interpolation_threshold = 0.05
+        self.interpolation_threshold = 0
         self.interpolation_mask = None
         self.last_interpolated_xyz = None
         self.should_interpolate = False

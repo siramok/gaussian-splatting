@@ -28,6 +28,7 @@ import json
 import numpy as np
 from typing import NamedTuple
 from vtk import vtkXMLPolyDataReader
+import matplotlib.pyplot as plt
 
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import focal2fov, fov2focal
@@ -190,7 +191,7 @@ def storeRawPly(path, mesh, values):
     ply_data.write(path)
 
 
-def buildRawDataset(path, filename, colormaps):
+def buildRawDataset(path, filename, colormaps, num_control_points, resolution, spacing):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -198,8 +199,8 @@ def buildRawDataset(path, filename, colormaps):
     os.makedirs(image_dir)
 
     # Window setup
-    width = 1600
-    height = 1600
+    width = resolution
+    height = resolution
     ratio = width / height
     pv.start_xvfb()
     pl = pv.Plotter(off_screen=True)
@@ -237,7 +238,7 @@ def buildRawDataset(path, filename, colormaps):
 
     mesh = pv.ImageData()
     mesh.dimensions = np.array(dimensions)
-    mesh.spacing = (1, 1, 1)
+    mesh.spacing = spacing
     mesh.point_data["value"] = values.ravel(order="F").astype(np.float32)
 
     # Point scaling
@@ -260,12 +261,19 @@ def buildRawDataset(path, filename, colormaps):
     image_counter = 0
 
     for colormap_id, colormap in enumerate(colormaps):
+        cmap = plt.cm.get_cmap(colormap, num_control_points)
         pl.add_volume(
             mesh,
             show_scalar_bar=False,
             scalars="value",
-            cmap=colormap,
-            opacity=max(0.004, 1.0 / min(dimensions)),
+            cmap=cmap,
+            opacity="linear",
+            blending="composite",
+            shade=False,
+            diffuse=0.0,
+            specular=0.0,
+            ambient=1.0,
+            opacity_unit_distance=None,
         )
 
         # Reset the camera position and focal point, since we translated the mesh
@@ -275,7 +283,9 @@ def buildRawDataset(path, filename, colormaps):
         camera = pl.camera
 
         # Controls the camera orbit and capture frequency
-        print(f"Generating images using {colormap} colormap")
+        print(
+            f"Generating images using {colormap} colormap, {resolution}x{resolution} resolution, and {spacing} spacing"
+        )
         azimuth_steps = 36
         elevation_steps = 7
         azimuth_range = range(0, 360, 360 // azimuth_steps)
@@ -349,7 +359,7 @@ def buildRawDataset(path, filename, colormaps):
 
     pl.close()
 
-    dropout_percentage = 0.999
+    dropout_percentage = 0.995
     mesh_dropout, values_dropout = random_dropout_raw(mesh, values, dropout_percentage)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
@@ -363,7 +373,7 @@ def buildRawDataset(path, filename, colormaps):
     return cam_infos, mesh
 
 
-def buildVtuDataset(path, colormaps):
+def buildVtuDataset(path, colormaps, num_control_points, resolution):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -371,8 +381,8 @@ def buildVtuDataset(path, colormaps):
     os.makedirs(image_dir)
 
     # Window setup
-    width = 900
-    height = 900
+    width = resolution
+    height = resolution
     ratio = width / height
     pv.start_xvfb()
     pl = pv.Plotter(off_screen=True)
@@ -411,12 +421,19 @@ def buildVtuDataset(path, colormaps):
     image_counter = 0
 
     for colormap_id, colormap in enumerate(colormaps):
+        cmap = plt.cm.get_cmap(colormap, num_control_points)
         pl.add_volume(
             mesh,
             show_scalar_bar=False,
             scalars=array_name,
-            cmap=colormap,
-            opacity=0.5,
+            cmap=cmap,
+            opacity="linear",
+            blending="composite",
+            shade=False,
+            diffuse=0.0,
+            specular=0.0,
+            ambient=1.0,
+            opacity_unit_distance=None,
         )
 
         # Reset the camera position and focal point, since we translated the mesh
@@ -426,7 +443,9 @@ def buildVtuDataset(path, colormaps):
         camera = pl.camera
 
         # Controls the camera orbit and capture frequency
-        print(f"Generating images using {colormap} colormap")
+        print(
+            f"Generating images using {colormap} colormap and resolution {resolution}x{resolution}"
+        )
         azimuth_steps = 36
         elevation_steps = 7
         azimuth_range = range(0, 360, 360 // azimuth_steps)
@@ -539,8 +558,12 @@ def getDirectppNorm(cam_info):
     return {"translate": translate, "radius": radius}
 
 
-def readRawSceneInfo(path, filename, colormaps, eval, llffhold=8):
-    cam_infos, mesh = buildRawDataset(path, filename, colormaps)
+def readRawSceneInfo(
+    path, filename, colormaps, num_control_points, resolution, spacing, eval, llffhold=8
+):
+    cam_infos, mesh = buildRawDataset(
+        path, filename, colormaps, num_control_points, resolution, spacing
+    )
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
@@ -570,8 +593,8 @@ def readRawSceneInfo(path, filename, colormaps, eval, llffhold=8):
     return scene_info
 
 
-def readVtuSceneInfo(path, colormaps, eval, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path, colormaps)
+def readVtuSceneInfo(path, colormaps, num_control_points, resolution, eval, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormaps, num_control_points, resolution)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]

@@ -9,7 +9,6 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-from ast import parse
 import os
 import sys
 import uuid
@@ -25,10 +24,14 @@ from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
-from utils.graphics_utils import create_colormaps, validate_colormaps
+from utils.graphics_utils import create_colormaps
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
-from utils.scaling_regularizer import ScalingRegularizer
+from utils.validate_args import (
+    validate_colormaps,
+    validate_resolution,
+    validate_spacing,
+)
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -65,7 +68,9 @@ def training(
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-    colormap_tables, derivative_tables = create_colormaps(dataset.colormaps)
+    colormap_tables, derivative_tables = create_colormaps(
+        dataset.colormaps, dataset.num_control_points
+    )
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -150,18 +155,10 @@ def training(
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-
         ssim_value = piq.multi_scale_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
-
-        scaling_config = {
-            "lambda_scaling": opt.lambda_scaling,
-            "method": "l2_norm",
-            "threshold": 450,
-        }
-
-        regularizer = ScalingRegularizer(**scaling_config)
-        scaling_loss = regularizer.compute_loss(gaussians)
-
+        scaling_loss = (
+            torch.mean(torch.norm(1.0 / gaussians._scaling, p=2)) * opt.lambda_scaling
+        )
         bound_loss = bounding_box_regularization(gaussians)
 
         # Combine all losses
@@ -211,9 +208,8 @@ def training(
                     {
                         "Loss": f"{ema_loss_for_log:.{7}f}",
                         "SSIM": f"{ssim_value.item():.{7}f}",
-                        "Scaling": f"{scaling_loss:.{7}f}",
+                        "Scaling": f"{scaling_loss.item():.{7}f}",
                         "Bound": f"{bound_loss.item():.{7}f}",
-                        "Depth": f"{ema_Ll1depth_for_log:.{7}f}",
                     }
                 )
                 progress_bar.update(500)
@@ -413,15 +409,43 @@ if __name__ == "__main__":
     parser.add_argument("--debug_from", type=int, default=-1)
     parser.add_argument("--detect_anomaly", action="store_true", default=False)
     parser.add_argument(
-        "--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 5_000, 10_000]
+        "--test_iterations",
+        nargs="+",
+        type=int,
+        default=list(range(1000, 40001, 1000)),
     )
     parser.add_argument(
-        "--save_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000]
+        "--save_iterations",
+        nargs="+",
+        type=int,
+        default=[
+            1,
+            1_000,
+            5_000,
+            10_000,
+            15_000,
+            20_000,
+            25_000,
+            30_000,
+            35_000,
+            40_000,
+        ],
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default=None)
+    parser.add_argument("--num_control_points", type=int, default=256)
+    parser.add_argument(
+        "--resolution",
+        type=validate_resolution,
+        default="medium",
+    )
+    parser.add_argument(
+        "--spacing",
+        type=validate_spacing,
+        default=(1, 1, 1),
+    )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -437,6 +461,9 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     dataset = lp.extract(args)
     dataset.colormaps = validate_colormaps(dataset.colormaps)
+    dataset.num_control_points = args.num_control_points
+    dataset.resolution = args.resolution
+    dataset.spacing = args.spacing
     training(
         dataset,
         op.extract(args),

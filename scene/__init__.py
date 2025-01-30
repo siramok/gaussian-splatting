@@ -49,10 +49,22 @@ class Scene:
 
         raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
         if os.path.exists(os.path.join(args.source_path, "data.vtu")):
-            scene_info = readVtuSceneInfo(args.source_path, args.colormaps, args.eval)
+            scene_info = readVtuSceneInfo(
+                args.source_path,
+                args.colormaps,
+                args.num_control_points,
+                args.resolution,
+                args.eval,
+            )
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
-                args.source_path, raw_files[0], args.colormaps, args.eval
+                args.source_path,
+                raw_files[0],
+                args.colormaps,
+                args.num_control_points,
+                args.resolution,
+                args.spacing,
+                args.eval,
             )
         else:
             raise FileNotFoundError(

@@ -29,7 +29,7 @@ class ParamGroup:
             t = type(value)
             value = value if not fill_none else None
             if shorthand:
-                if t == bool:
+                if t is bool:
                     group.add_argument(
                         "--" + key, ("-" + key[0:1]), default=value, action="store_true"
                     )
@@ -38,7 +38,7 @@ class ParamGroup:
                         "--" + key, ("-" + key[0:1]), default=value, type=t
                     )
             else:
-                if t == bool:
+                if t is bool:
                     group.add_argument("--" + key, default=value, action="store_true")
                 else:
                     group.add_argument("--" + key, default=value, type=t)
@@ -57,13 +57,11 @@ class ModelParams(ParamGroup):
         self._model_path = ""
         self._images = "images"
         self._depths = ""
-        self._resolution = -1
         self._white_background = False
         self.train_test_exp = False
         self.data_device = "cuda"
         self.eval = False
         self.colormaps = "viridis"
-        self.colormap_ids = [0]
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -81,9 +79,9 @@ class PipelineParams(ParamGroup):
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
-        self.iterations = 10_000
-        self.train_opacity = False
-        self.train_values = False
+        self.iterations = 40_000
+        self.train_opacity = True
+        self.train_values = True
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
@@ -98,7 +96,7 @@ class OptimizationParams(ParamGroup):
         self.exposure_lr_delay_steps = 0
         self.exposure_lr_delay_mult = 0.0
         self.percent_dense = 0.01
-        self.lambda_dssim = 0.2
+        self.lambda_dssim = 0.55
         self.lambda_scaling = 0.00001
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
@@ -129,6 +127,6 @@ def get_combined_args(parser: ArgumentParser):
 
     merged_dict = vars(args_cfgfile).copy()
     for k, v in vars(args_cmdline).items():
-        if v != None:
+        if v is not None:
             merged_dict[k] = v
     return Namespace(**merged_dict)

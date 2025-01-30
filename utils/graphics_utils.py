@@ -85,44 +85,34 @@ def focal2fov(focal, pixels):
     return 2 * math.atan(pixels / (2 * focal))
 
 
-def validate_colormaps(colormaps):
-    validated_maps = []
-    for cmap in colormaps.split(","):
-        if cmap not in plt.colormaps():
-            raise ValueError(f"Invalid colormap: {cmap}")
-        validated_maps.append(cmap)
+def create_colormaps(names, num_points=256):
+    all_colors = []
+    all_derivatives = []
 
-    if not validated_maps:
-        print("No valid colormaps found")
-        raise
-
-    return validated_maps
-
-
-def create_colormaps(cmap_names, num_points=32):
-    try:
-        # Preallocate numpy arrays
-        num_colormaps = len(cmap_names)
-        tables = np.zeros((num_colormaps, num_points, 3), dtype=np.float32)
-        derivatives = np.zeros((num_colormaps, num_points, 3), dtype=np.float32)
-
-        for i, name in enumerate(cmap_names):
+    for name in names:
+        try:
             cmap = plt.cm.get_cmap(name)
             control_points = np.linspace(0.0, 1.0, num_points)
-
-            # Get colors
             colors = cmap(control_points)[:, :3]
-            tables[i] = colors
 
-            # Compute derivatives
-            derivatives[i, :-1] = (colors[1:] - colors[:-1]) * (num_points - 1)
-            derivatives[i, -1] = 0
+            derivatives = np.zeros_like(colors, dtype=np.float32)
+            for i in range(num_points - 1):
+                derivatives[i] = (colors[i + 1] - colors[i]) * (num_points - 1)
+            derivatives[-1] = 0
 
-        return (
-            torch.as_tensor(tables, dtype=torch.float32, device="cuda"),
-            torch.as_tensor(derivatives, dtype=torch.float32, device="cuda"),
-        )
+            all_colors.append(colors)
+            all_derivatives.append(derivatives)
 
-    except Exception as e:
-        print(f"Error creating {len(cmap_names)} colormaps: {e}")
-        raise
+        except Exception as e:
+            print(f"Error in create_colormaps for '{name}': {e}")
+            raise
+
+    all_colors_np = np.stack(all_colors, axis=0).astype(np.float32)
+    all_colors_np = all_colors_np.reshape(-1, num_points * 3)
+    all_derivatives_np = np.stack(all_derivatives, axis=0).astype(np.float32)
+    all_derivatives_np = all_derivatives_np.reshape(-1, num_points * 3)
+
+    colormap_tensor = torch.from_numpy(all_colors_np).to("cuda")
+    derivative_tensor = torch.from_numpy(all_derivatives_np).to("cuda")
+
+    return colormap_tensor, derivative_tensor
