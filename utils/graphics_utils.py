@@ -94,25 +94,19 @@ def create_colormaps(names, num_points=256):
             cmap = plt.cm.get_cmap(name)
             control_points = np.linspace(0.0, 1.0, num_points)
             colors = cmap(control_points)[:, :3]
+            colormap_table = torch.tensor(colors, dtype=torch.float32).to("cuda")
 
             derivatives = np.zeros_like(colors, dtype=np.float32)
             for i in range(num_points - 1):
                 derivatives[i] = (colors[i + 1] - colors[i]) * (num_points - 1)
             derivatives[-1] = 0
+            colormap_derivatives = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
 
-            all_colors.append(colors)
-            all_derivatives.append(derivatives)
+            all_colors.append(colormap_table)
+            all_derivatives.append(colormap_derivatives)
 
         except Exception as e:
             print(f"Error in create_colormaps for '{name}': {e}")
             raise
 
-    all_colors_np = np.stack(all_colors, axis=0).astype(np.float32)
-    all_colors_np = all_colors_np.reshape(-1, num_points * 3)
-    all_derivatives_np = np.stack(all_derivatives, axis=0).astype(np.float32)
-    all_derivatives_np = all_derivatives_np.reshape(-1, num_points * 3)
-
-    colormap_tensor = torch.from_numpy(all_colors_np).to("cuda")
-    derivative_tensor = torch.from_numpy(all_derivatives_np).to("cuda")
-
-    return colormap_tensor, derivative_tensor
+    return all_colors, all_derivatives

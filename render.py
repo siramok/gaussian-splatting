@@ -49,15 +49,14 @@ def render_set(
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
-    for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), 10):
+    for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), len(views)):
         rendering = render(
             view,
             gaussians,
             pipeline,
             background,
-            view.colormap_id,
-            colormap_tables,
-            derivative_tables,
+            colormap_tables[view.colormap_id],
+            derivative_tables[view.colormap_id],
             use_trained_exp=train_test_exp,
         )["render"]
         gt = view.original_image[0:3, :, :]

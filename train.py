@@ -140,9 +140,8 @@ def training(
             gaussians,
             pipe,
             background,
-            viewpoint_cam.colormap_id,
-            colormap_tables,
-            derivative_tables,
+            colormap_tables[viewpoint_cam.colormap_id],
+            derivative_tables[viewpoint_cam.colormap_id],
             use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
@@ -231,9 +230,8 @@ def training(
                 (
                     pipe,
                     background,
-                    viewpoint_cam.colormap_id,
-                    colormap_tables,
-                    derivative_tables,
+                    colormap_tables[viewpoint_cam.colormap_id],
+                    derivative_tables[viewpoint_cam.colormap_id],
                 ),
                 dataset.train_test_exp,
             )
