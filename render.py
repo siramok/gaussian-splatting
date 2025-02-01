@@ -13,6 +13,7 @@ import os
 from argparse import ArgumentParser
 from itertools import islice
 from os import makedirs
+from turtle import st
 
 import torch
 import torchvision
@@ -22,11 +23,12 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel, render
 from scene import Scene
 from utils.general_utils import safe_state
-from utils.graphics_utils import create_colormap, create_opacitymap
+from utils.graphics_utils import create_colormaps, create_opacitymap
+from utils.validate_args import validate_colormaps, validate_resolution, validate_spacing
 
 
 def render_set(
-    model_path, name, iteration, views, gaussians, pipeline, background, colormap_table, derivatives, opacity_table, opac_derivatives, train_test_exp
+    model_path, name, iteration, views, gaussians, pipeline, background, colormap_tables, derivatives, opacity_table, opac_derivatives, train_test_exp
 ):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -36,7 +38,7 @@ def render_set(
 
     for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), len(views)):
         rendering = render(
-            view, gaussians, pipeline, background, colormap_table, derivatives, opacity_table, opac_derivatives, use_trained_exp=train_test_exp
+            view, gaussians, pipeline, background, colormap_tables[view.colormap_id], derivatives[view.colormap_id], opacity_table, opac_derivatives, use_trained_exp=train_test_exp
         )["render"]
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(
@@ -55,13 +57,14 @@ def render_sets(
     skip_test: bool,
 ):
     with torch.no_grad():
-        colormap_table, derivatives = create_colormap(dataset.colormap)
         opacity_table, opac_derivatives = create_opacitymap()
         gaussians = GaussianModel()
         scene = Scene(dataset, gaussians, opacity_table, load_iteration=iteration, shuffle=False)
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+        colormap_tables, derivative_tables = create_colormaps(dataset.colormaps)
 
         if not skip_train:
             render_set(
@@ -72,8 +75,8 @@ def render_sets(
                 gaussians,
                 pipeline,
                 background,
-                colormap_table,
-                derivatives,
+                colormap_tables,
+                derivative_tables,
                 opacity_table,
                 opac_derivatives,
                 dataset.train_test_exp,
@@ -88,9 +91,9 @@ def render_sets(
                 gaussians,
                 pipeline,
                 background,
-                colormap_table,
+                colormap_tables,
                 opacity_table,
-                derivatives,
+                derivative_tables,
                 opacity_table,
                 opac_derivatives,
                 dataset.train_test_exp,
@@ -106,14 +109,36 @@ if __name__ == "__main__":
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--num_control_points", type=int, default=256)
+    parser.add_argument(
+        "--resolution",
+        type=validate_resolution,
+        default="medium",
+    )
+    parser.add_argument(
+        "--spacing",
+        type=validate_spacing,
+        default=(1, 1, 1),
+    )
     args = get_combined_args(parser)
+    print(f"Colormaps: {args.colormaps}")
     print("Rendering " + args.model_path)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
+    dataset = model.extract(args)
+    if isinstance(args.colormaps, list):
+        dataset.colormaps = args.colormaps
+    else:
+        dataset.colormaps = validate_colormaps(dataset.colormaps)
+
+    print(f"Colormaps: {dataset.colormaps}")
+    dataset.num_control_points = args.num_control_points
+    dataset.resolution = args.resolution
+    dataset.spacing = args.spacing
     render_sets(
-        model.extract(args),
+        dataset,
         args.iteration,
         pipeline.extract(args),
         args.skip_train,

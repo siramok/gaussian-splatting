@@ -29,20 +29,21 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
             ) / float(2**16)
         except FileNotFoundError:
             print(
-                f"Error: The depth file at path '{
-                    cam_info.depth_path}' was not found."
+                f"Error: The depth file at path '{cam_info.depth_path}' was not found."
             )
             raise
         except IOError:
             print(
                 f"Error: Unable to open the image file '{
-                    cam_info.depth_path}'. It may be corrupted or an unsupported format."
+                    cam_info.depth_path
+                }'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
                 f"An unexpected error occurred when trying to read depth at {
-                    cam_info.depth_path}: {e}"
+                    cam_info.depth_path
+                }: {e}"
             )
             raise
     else:
@@ -50,8 +51,9 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
 
     orig_w, orig_h = image.size
     if args.resolution in [1, 2, 4, 8]:
-        resolution = round(orig_w / (resolution_scale * args.resolution)), round(
-            orig_h / (resolution_scale * args.resolution)
+        resolution = (
+            round(orig_w / (resolution_scale * args.resolution)),
+            round(orig_h / (resolution_scale * args.resolution)),
         )
     else:  # should be a type that converts to float
         if args.resolution == -1:
@@ -84,6 +86,7 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
         invdepthmap=invdepthmap,
         image_name=cam_info.image_name,
         uid=id,
+        colormap_id=cam_info.colormap_id,
         data_device=args.data_device,
         train_test_exp=args.train_test_exp,
         is_test_dataset=is_test_dataset,
@@ -101,20 +104,21 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
             ) / float(2**16)
         except FileNotFoundError:
             print(
-                f"Error: The depth file at path '{
-                    cam_info.depth_path}' was not found."
+                f"Error: The depth file at path '{cam_info.depth_path}' was not found."
             )
             raise
         except IOError:
             print(
                 f"Error: Unable to open the image file '{
-                    cam_info.depth_path}'. It may be corrupted or an unsupported format."
+                    cam_info.depth_path
+                }'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
                 f"An unexpected error occurred when trying to read depth at {
-                    cam_info.depth_path}: {e}"
+                    cam_info.depth_path
+                }: {e}"
             )
             raise
     else:
@@ -122,8 +126,9 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
 
     orig_w, orig_h = image.size
     if args.resolution in [1, 2, 4, 8]:
-        resolution = round(orig_w / (resolution_scale * args.resolution)), round(
-            orig_h / (resolution_scale * args.resolution)
+        resolution = (
+            round(orig_w / (resolution_scale * args.resolution)),
+            round(orig_h / (resolution_scale * args.resolution)),
         )
     else:  # should be a type that converts to float
         if args.resolution == -1:
@@ -156,6 +161,7 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
         invdepthmap=invdepthmap,
         image_name=cam_info.image_name,
         uid=id,
+        colormap_id=cam_info.colormap_id,
         data_device=args.data_device,
         train_test_exp=args.train_test_exp,
         is_test_dataset=is_test_dataset,

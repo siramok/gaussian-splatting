@@ -50,11 +50,25 @@ class Scene:
         self.test_cameras = {}
 
         raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
-        if os.path.exists(os.path.join(args.source_path, "data.vtui")):
-            scene_info = readVtuSceneInfo(args.source_path, args.colormap, opacitymap, args.eval)
+        if os.path.exists(os.path.join(args.source_path, "data.vtu")):
+            scene_info = readVtuSceneInfo(
+                args.source_path,
+                args.colormaps,
+                opacitymap,
+                args.num_control_points,
+                args.resolution,
+                args.eval,
+            )
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
-                args.source_path, raw_files[0], args.colormap, opacitymap, args.eval
+                args.source_path,
+                raw_files[0],
+                args.colormaps,
+                opacitymap,
+                args.num_control_points,
+                args.resolution,
+                args.spacing,
+                args.eval,
             )
         else:
             raise FileNotFoundError(
@@ -62,21 +76,23 @@ class Scene:
             )
 
         if not self.loaded_iter:
-            with (
-                open(scene_info.ply_path, "rb") as src_file,
-                open(os.path.join(self.model_path, "input.ply"), "wb") as dest_file,
-            ):
-                dest_file.write(src_file.read())
-            json_cams = []
-            camlist = []
-            if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
-            if scene_info.train_cameras:
-                camlist.extend(scene_info.train_cameras)
-            for id, cam in enumerate(camlist):
-                json_cams.append(camera_to_JSON(id, cam))
-            with open(os.path.join(self.model_path, "cameras.json"), "w") as file:
-                json.dump(json_cams, file)
+            with open(scene_info.ply_path, "rb") as src_file:
+                with open(
+                    os.path.join(self.model_path, "input.ply"), "wb"
+                ) as dest_file:
+                    dest_file.write(src_file.read())
+                    json_cams = []
+                    camlist = []
+                    if scene_info.test_cameras:
+                        camlist.extend(scene_info.test_cameras)
+                    if scene_info.train_cameras:
+                        camlist.extend(scene_info.train_cameras)
+                    for id, cam in enumerate(camlist):
+                        json_cams.append(camera_to_JSON(id, cam))
+                    with open(
+                        os.path.join(self.model_path, "cameras.json"), "w"
+                    ) as file:
+                        json.dump(json_cams, file)
 
         if shuffle:
             random.shuffle(
