@@ -289,7 +289,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
             print(
                 f"Generating images using {colormap} colormap, opacitymap {opacitymap_id}, {resolution}x{resolution} resolution, and {spacing} spacing"
             )
-            azimuth_steps = 36
+            azimuth_steps = 18
             elevation_steps = 7
             azimuth_range = range(0, 360, 360 // azimuth_steps)
             # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]

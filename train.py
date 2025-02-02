@@ -18,6 +18,7 @@ from random import randint
 import torch
 from tqdm import tqdm
 import piq
+import numpy as np
 
 from arguments import ModelParams, OptimizationParams, PipelineParams
 from gaussian_renderer import network_gui, render
@@ -52,6 +53,7 @@ def training(
     checkpoint_iterations,
     checkpoint,
     debug_from,
+    interpolate_until
 ):
     first_iter = 0
     colormap_tables, derivatives = create_colormaps(dataset.colormaps, dataset.num_control_points)
@@ -115,7 +117,7 @@ def training(
             except Exception:
                 network_gui.conn = None
 
-        if iteration == 1 or not opt.train_values:
+        if iteration <= interpolate_until or not opt.train_values:
             gaussians.interpolate_new_values()
 
         iter_start.record()
@@ -192,7 +194,6 @@ def training(
             Ll1depth = Ll1depth.item()
         else:
             Ll1depth = 0
-
         loss.backward()
 
         iter_end.record()
@@ -250,7 +251,6 @@ def training(
                 gaussians.add_densification_stats(
                     viewspace_point_tensor, visibility_filter
                 )
-
                 if (
                     iteration > opt.densify_from_iter
                     and iteration % opt.densification_interval == 0
@@ -263,6 +263,7 @@ def training(
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
+                        1
                     )
 
                 if (
@@ -431,6 +432,11 @@ if __name__ == "__main__":
             40_000,
         ],
     )
+    parser.add_argument(
+        "--interpolate_until",
+        type=int,
+        default=1,
+    )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -473,6 +479,7 @@ if __name__ == "__main__":
         args.checkpoint_iterations,
         args.start_checkpoint,
         args.debug_from,
+        args.interpolate_until
     )
 
     # All done

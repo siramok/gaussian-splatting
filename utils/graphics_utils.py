@@ -111,7 +111,7 @@ def create_colormaps(names, num_points=256):
     return all_colors, all_derivatives
 
 
-def create_opacitymaps(options=["inv_linear", "linear"], num_points=256, num_steps=0):
+def create_opacitymaps(options=[], num_points=256, num_steps=5):
     option_to_func = {
         "inv_linear": np.linspace(1.0, 0.0, num_points),
         "linear": np.linspace(0.0, 1.0, num_points),
@@ -143,6 +143,7 @@ def create_opacitymaps(options=["inv_linear", "linear"], num_points=256, num_ste
         bins = np.linspace(0, num_points, num_steps+1).astype(int)
         
         for arr in [((indices >= start) & (indices < end)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
+            arr = arr * 0.5
             opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
 
             # Precompute derivatives
