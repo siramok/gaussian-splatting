@@ -23,7 +23,7 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel, render
 from scene import Scene
 from utils.general_utils import safe_state
-from utils.graphics_utils import create_colormaps, create_opacitymap
+from utils.graphics_utils import create_colormaps, create_opacitymaps
 from utils.validate_args import validate_colormaps, validate_resolution, validate_spacing
 
 
