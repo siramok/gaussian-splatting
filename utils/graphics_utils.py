@@ -99,7 +99,6 @@ def create_colormaps(names, num_points=256):
             derivatives = np.zeros_like(colors, dtype=np.float32)
             for i in range(num_points - 1):
                 derivatives[i] = (colors[i + 1] - colors[i]) * (num_points - 1)
-            derivatives[-1] = 0
             colormap_derivatives = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
 
             all_colors.append(colormap_table)
@@ -112,28 +111,62 @@ def create_colormaps(names, num_points=256):
     return all_colors, all_derivatives
 
 
-def create_opacitymap(num_points=256):
+def create_opacitymaps(options=["inv_linear", "linear"], num_points=256, num_steps=0):
+    option_to_func = {
+        "inv_linear": np.linspace(1.0, 0.0, num_points),
+        "linear": np.linspace(0.0, 1.0, num_points),
+        "constant": np.ones(num_points) * 0.01
+    }
+    opacs = []
+    opac_derivatives = []
+    for option in options:
+        try:
+            opac = option_to_func[option]
+            opac_table = torch.tensor(opac, dtype=torch.float32).to("cuda")
+
+            # Precompute derivatives
+            derivatives = np.zeros_like(opac, dtype=np.float32)
+            for i in range(num_points - 1):
+                derivatives[i] = (opac[i + 1] - opac[i]) * (num_points - 1)
+
+            # Convert derivatives to float32 and GPU tensor
+            opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+
+            opacs.append(opac_table)
+            opac_derivatives.append(opac_derivative)
+
+        except Exception as e:
+            print(f"Error in create_opacitymaps: {e}")
+            raise
     try:
-        # Generate control points in the range [0, 1]
-        linear_opac = np.linspace(0.0, 1.0, num_points)
-        # linear_opac = (np.random.rand(num_points) < 0.5) * 0.1
+        indices = np.arange(num_points)
+        bins = np.linspace(0, num_points, num_steps+1).astype(int)
+        
+        for arr in [((indices >= start) & (indices < end)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
+            opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
 
-        # Convert to float32 for GPU efficiency
-        opac_table = torch.tensor(linear_opac, dtype=torch.float32).to("cuda")
+            # Precompute derivatives
+            derivatives = np.zeros_like(arr, dtype=np.float32)
+            for i in range(num_points - 1):
+                derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
 
-        # Precompute derivatives
-        derivatives = np.zeros_like(linear_opac, dtype=np.float32)
-        for i in range(num_points - 1):
-            derivatives[i] = (linear_opac[i + 1] - linear_opac[i]) * (num_points - 1)
+            # Convert derivatives to float32 and GPU tensor
+            opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
 
-        # Only n-1 intervals when n points between [0,1]
-        derivatives[-1] = 0
-
-        # Convert derivatives to float32 and GPU tensor
-        opac_derivatives = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-
-        return opac_table, opac_derivatives
-
+            opacs.append(opac_table)
+            opac_derivatives.append(opac_derivative)
     except Exception as e:
-        print(f"Error in create_colormap: {e}")
+        print(f"Error in create_opacitymaps: {e}")
         raise
+
+    # opac = np.zeros(num_points)
+    # opac[-1] = 1
+    # opac_table = torch.tensor(opac, dtype=torch.float32).to("cuda")
+    # derivatives = np.zeros_like(opac, dtype=np.float32)
+    # for i in range(num_points - 1):
+    #     derivatives[i] = (opac[i + 1] - opac[i]) * (num_points - 1)
+    # opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+    # opacs.append(opac_table)
+    # opac_derivatives.append(opac_derivative)
+
+    return opacs, opac_derivatives

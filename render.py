@@ -28,7 +28,7 @@ from utils.validate_args import validate_colormaps, validate_resolution, validat
 
 
 def render_set(
-    model_path, name, iteration, views, gaussians, pipeline, background, colormap_tables, derivatives, opacity_table, opac_derivatives, train_test_exp
+    model_path, name, iteration, views, gaussians, pipeline, background, colormap_tables, derivatives, opacity_tables, opac_derivatives, train_test_exp
 ):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -38,7 +38,7 @@ def render_set(
 
     for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), len(views)):
         rendering = render(
-            view, gaussians, pipeline, background, colormap_tables[view.colormap_id], derivatives[view.colormap_id], opacity_table, opac_derivatives, use_trained_exp=train_test_exp
+            view, gaussians, pipeline, background, colormap_tables[view.colormap_id], derivatives[view.colormap_id], opacity_tables[view.opacitymap_id], opac_derivatives[view.opacitymap_id], use_trained_exp=train_test_exp
         )["render"]
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(
@@ -57,9 +57,9 @@ def render_sets(
     skip_test: bool,
 ):
     with torch.no_grad():
-        opacity_table, opac_derivatives = create_opacitymap()
+        opacity_tables, opac_derivatives = create_opacitymaps()
         gaussians = GaussianModel()
-        scene = Scene(dataset, gaussians, opacity_table, load_iteration=iteration, shuffle=False)
+        scene = Scene(dataset, gaussians, opacity_tables, load_iteration=iteration, shuffle=False)
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -77,7 +77,7 @@ def render_sets(
                 background,
                 colormap_tables,
                 derivative_tables,
-                opacity_table,
+                opacity_tables,
                 opac_derivatives,
                 dataset.train_test_exp,
             )
@@ -92,9 +92,8 @@ def render_sets(
                 pipeline,
                 background,
                 colormap_tables,
-                opacity_table,
                 derivative_tables,
-                opacity_table,
+                opacity_tables,
                 opac_derivatives,
                 dataset.train_test_exp,
             )

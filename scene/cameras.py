@@ -33,6 +33,7 @@ class Camera(nn.Module):
         image_name,
         uid,
         colormap_id,
+        opacitymap_id,
         trans=np.array([0.0, 0.0, 0.0]),
         scale=1.0,
         data_device="cuda",
@@ -50,6 +51,7 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
         self.colormap_id = colormap_id
+        self.opacitymap_id = opacitymap_id
 
         try:
             self.data_device = torch.device(data_device)

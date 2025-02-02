@@ -24,7 +24,7 @@ from gaussian_renderer import network_gui, render
 from scene import GaussianModel, Scene
 from utils.debug_utils import save_debug_image
 from utils.general_utils import get_expon_lr_func, safe_state
-from utils.graphics_utils import create_colormaps, create_opacitymap
+from utils.graphics_utils import create_colormaps, create_opacitymaps
 from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.validate_args import (
@@ -55,10 +55,10 @@ def training(
 ):
     first_iter = 0
     colormap_tables, derivatives = create_colormaps(dataset.colormaps, dataset.num_control_points)
-    opacity_table, opac_derivatives = create_opacitymap()
+    opacity_tables, opac_derivatives = create_opacitymaps()
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
-    scene = Scene(dataset, gaussians, opacity_table)
+    scene = Scene(dataset, gaussians, opacity_tables)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -140,8 +140,8 @@ def training(
             background,
             colormap_tables[viewpoint_cam.colormap_id],
             derivatives[viewpoint_cam.colormap_id],
-            opacity_table,
-            opac_derivatives,
+            opacity_tables[viewpoint_cam.opacitymap_id],
+            opac_derivatives[viewpoint_cam.opacitymap_id],
             use_trained_exp=dataset.train_test_exp,
         )
         image, viewspace_point_tensor, visibility_filter, radii = (
@@ -176,7 +176,7 @@ def training(
                     dataset.model_path,
                     gt_image,
                     image,
-                    f"debug_{iteration}_cmap_id_{viewpoint_cam.colormap_id}.png",
+                    f"debug_{iteration}_cmap_{viewpoint_cam.colormap_id}_omap_{viewpoint_cam.opacitymap_id}.png",
                 )
 
         # Depth regularization
@@ -232,8 +232,8 @@ def training(
                     background,
                     colormap_tables[viewpoint_cam.colormap_id],
                     derivatives[viewpoint_cam.colormap_id],
-                    opacity_table, 
-                    opac_derivatives
+                    opacity_tables[viewpoint_cam.opacitymap_id], 
+                    opac_derivatives[viewpoint_cam.opacitymap_id]
                 ),
                 dataset.train_test_exp,
             )
