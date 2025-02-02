@@ -141,8 +141,9 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5):
     try:
         indices = np.arange(num_points)
         bins = np.linspace(0, num_points, num_steps+1).astype(int)
-        
-        for arr in [((indices >= start) & (indices < end)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
+        idx = 0
+        # Add another 1 on either side of interval for continuity
+        for arr in [((indices >= start - 1) & (indices < end + 1)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
             arr = arr * 0.5
             opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
 
@@ -153,9 +154,9 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5):
 
             # Convert derivatives to float32 and GPU tensor
             opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-
             opacs.append(opac_table)
             opac_derivatives.append(opac_derivative)
+            idx+=1
     except Exception as e:
         print(f"Error in create_opacitymaps: {e}")
         raise

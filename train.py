@@ -16,6 +16,7 @@ from argparse import ArgumentParser, Namespace
 from random import randint
 
 import torch
+from torch.nn.utils import clip_grad_norm_
 from tqdm import tqdm
 import piq
 import numpy as np
@@ -81,6 +82,7 @@ def training(
 
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
+    densified = False
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -166,7 +168,7 @@ def training(
         loss = (
             (1.0 - opt.lambda_dssim) * Ll1
             + opt.lambda_dssim * (1.0 - ssim_value)
-            + scaling_loss
+            # + scaling_loss
             + bound_loss
         )
 
@@ -242,7 +244,14 @@ def training(
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
+            gaussians._values.grad.data.clamp_(-1.0, 1.0)
+            # values_grads = gaussians._values.grad.cpu().detach().numpy()
+            # print(f"values mean: {np.mean(values_grads)}")
+            # print(f"values max: {np.max(values_grads)}")
+            # print(f"values min: {np.min(values_grads)}")
+
             # Densification
+            densified = False
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(
@@ -263,14 +272,19 @@ def training(
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
-                        1
+                        1e-5
                     )
+                    densified = True
 
                 if (
                     iteration % opt.opacity_reset_interval == 0 and opt.train_opacity
                 ) or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
+            # values_grads = gaussians._values.grad.cpu().detach().numpy()
+            # print(f"values mean: {np.mean(values_grads)}")
+            # print(f"values max: {np.max(values_grads)}")
+            # print(f"values min: {np.min(values_grads)}")
             # Optimizer step
             if iteration < opt.iterations:
                 gaussians.exposure_optimizer.step()
@@ -424,12 +438,10 @@ if __name__ == "__main__":
             1_000,
             5_000,
             10_000,
-            15_000,
             20_000,
-            25_000,
             30_000,
-            35_000,
             40_000,
+            50_000
         ],
     )
     parser.add_argument(

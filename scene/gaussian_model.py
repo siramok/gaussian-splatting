@@ -69,6 +69,7 @@ class GaussianModel:
         self.last_interpolated_xyz = None
         self.should_interpolate = False
         self.bounding_box = None
+        self.old_gaussians = None
         self.train_opacity = train_opacity
         self.train_values = train_values
         self.setup_functions()
@@ -191,6 +192,8 @@ class GaussianModel:
         self.last_interpolated_xyz = self._xyz.clone()
         self.interpolation_mask = np.full(self._xyz.shape[0], True)
         self.should_interpolate = True
+
+        self.old_gaussians = np.full(self._values.shape[0], True)
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -377,14 +380,18 @@ class GaussianModel:
                 if group["name"] == "value":
                     requires_grad = self.train_values
                 stored_state = self.optimizer.state.get(group["params"][0], None)
-                stored_state["exp_avg"] = torch.zeros_like(tensor)
-                stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+                if stored_state is not None:
+                    stored_state["exp_avg"] = torch.zeros_like(tensor)
+                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
-                del self.optimizer.state[group["params"][0]]
-                group["params"][0] = nn.Parameter(tensor.requires_grad_(requires_grad))
-                self.optimizer.state[group["params"][0]] = stored_state
+                    del self.optimizer.state[group["params"][0]]
+                    group["params"][0] = nn.Parameter(tensor.requires_grad_(requires_grad))
+                    self.optimizer.state[group["params"][0]] = stored_state
 
-                optimizable_tensors[group["name"]] = group["params"][0]
+                    optimizable_tensors[group["name"]] = group["params"][0]
+                else:
+                    group["params"][0] = nn.Parameter(tensor.requires_grad_(requires_grad))
+                    optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
 
     def _prune_optimizer(self, mask):
@@ -433,7 +440,9 @@ class GaussianModel:
             valid_points_mask.detach().cpu().numpy()
         ]
 
-    def cat_tensors_to_optimizer(self, tensors_dict):
+        self.old_gaussians = self.old_gaussians[valid_points_mask.detach().cpu().numpy()]
+
+    def cat_tensors_to_optimizer(self, tensors_dict, source_indices):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             requires_grad = True
@@ -445,11 +454,17 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
+                if group["name"] == "value":
+                    exp_avg = stored_state["exp_avg"][source_indices].clone()
+                    exp_avg_sq = stored_state["exp_avg_sq"][source_indices].clone()
+                else:
+                    exp_avg = torch.zeros_like(extension_tensor)
+                    exp_avg_sq = torch.zeros_like(extension_tensor)     
                 stored_state["exp_avg"] = torch.cat(
-                    (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
+                    (stored_state["exp_avg"], exp_avg), dim=0
                 )
                 stored_state["exp_avg_sq"] = torch.cat(
-                    (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
+                    (stored_state["exp_avg_sq"], exp_avg_sq),
                     dim=0,
                 )
 
@@ -473,7 +488,7 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(
-        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values
+        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values, source_indices
     ):
         d = {
             "xyz": new_xyz,
@@ -483,7 +498,7 @@ class GaussianModel:
             "value": new_values,
         }
 
-        optimizable_tensors = self.cat_tensors_to_optimizer(d)
+        optimizable_tensors = self.cat_tensors_to_optimizer(d, source_indices)
 
         # The sizes may not be the same, which necessitates extending the arrays
         # used for interpolation
@@ -502,19 +517,9 @@ class GaussianModel:
                 (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]),
                 dim=0,
             )
-            self._values = torch.cat(
-                (
-                    self._values,
-                    self.inverse_values_activation(
-                        torch.tensor(
-                            np.zeros((new_size - old_size, 1)),
-                            dtype=torch.float,
-                            device="cuda",
-                        )
-                    ),
-                ),
-                dim=0,
-            )
+            old_gaussians = np.full(new_size, False)
+            old_gaussians[:old_size] = self.old_gaussians
+            self.old_gaussians = old_gaussians
 
         # Compute the distances between the new points and the last interpolated points
         new_xyz = optimizable_tensors["xyz"][:old_size]
@@ -567,7 +572,7 @@ class GaussianModel:
         new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
-            new_xyz, new_opacity, new_scaling, new_rotation, new_values
+            new_xyz, new_opacity, new_scaling, new_rotation, new_values, torch.where(selected_pts_mask)[0]
         )
 
         prune_filter = torch.cat(
@@ -601,13 +606,22 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_values,
+            torch.where(selected_pts_mask)[0]
         )
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad):
         # opac_grads = self._opacity.grad.clone()
+        grads = self.xyz_gradient_accum / self.denom
+        print(self.xyz_gradient_accum.shape)
+        grads[grads.isnan()] = 0.0
+
+        self.densify_and_clone(grads, max_grad, extent)
+        self.densify_and_split(grads, max_grad, extent)
+
         # opac_grads = torch.cat([opac_grads, torch.zeros((self._opacity.size(0) - opac_grads.size(0), 1), device="cuda")])
-        prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
-        # prune_mask = (self.get_opacity < min_opacity).squeeze()
+        # prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
+        # prune_mask = (opac_grads > max_opac_grad).squeeze()
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
         if max_screen_size:
             big_points_vs = self.max_radii2D > max_screen_size
             big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
@@ -616,12 +630,6 @@ class GaussianModel:
             )
         # print(f"Num pruned: {np.count_nonzero(prune_mask.cpu().detach().numpy())}")
         self.prune_points(prune_mask)
-
-        grads = self.xyz_gradient_accum / self.denom
-        grads[grads.isnan()] = 0.0
-
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
 
         torch.cuda.empty_cache()
 
@@ -640,7 +648,7 @@ class GaussianModel:
         if (values < 0).any():
             print("some values are 0??")
         self.interpolator = NearestNDInterpolator(
-            points, values, tree_options={"leafsize": 30}
+            points, values
         )
 
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
@@ -672,7 +680,8 @@ class GaussianModel:
             )
         )
 
-        self._values = nn.Parameter(new_values.requires_grad_(self.train_values))
+        optimizable_tensors = self.replace_tensor_to_optimizer(new_values, "value")
+        self._values = optimizable_tensors["value"]
 
         # Update the last interpolated positions, and reset the interpolation mask
         self.last_interpolated_xyz[self.interpolation_mask] = self._xyz[

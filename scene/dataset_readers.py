@@ -289,7 +289,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
             print(
                 f"Generating images using {colormap} colormap, opacitymap {opacitymap_id}, {resolution}x{resolution} resolution, and {spacing} spacing"
             )
-            azimuth_steps = 18
+            azimuth_steps = 36
             elevation_steps = 7
             azimuth_range = range(0, 360, 360 // azimuth_steps)
             # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
@@ -363,7 +363,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
     pl.close()
 
-    dropout_percentage = 0.995
+    dropout_percentage = 0.99
     mesh_dropout, values_dropout = random_dropout_raw(mesh, values, dropout_percentage)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
