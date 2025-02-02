@@ -433,7 +433,7 @@ class GaussianModel:
             valid_points_mask.detach().cpu().numpy()
         ]
 
-    def cat_tensors_to_optimizer(self, tensors_dict):
+    def cat_tensors_to_optimizer(self, tensors_dict, source_indices):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             requires_grad = True
@@ -445,11 +445,17 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
+                if group["name"] == "value":
+                    exp_avg = stored_state["exp_avg"][source_indices].clone()
+                    exp_avg_sq = stored_state["exp_avg_sq"][source_indices].clone()
+                else:
+                    exp_avg = torch.zeros_like(extension_tensor)
+                    exp_avg_sq = torch.zeros_like(extension_tensor)   
                 stored_state["exp_avg"] = torch.cat(
-                    (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
+                    (stored_state["exp_avg"], exp_avg), dim=0
                 )
                 stored_state["exp_avg_sq"] = torch.cat(
-                    (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
+                    (stored_state["exp_avg_sq"], exp_avg_sq),
                     dim=0,
                 )
 
@@ -473,7 +479,7 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(
-        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values
+        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values, source_indices
     ):
         d = {
             "xyz": new_xyz,
@@ -483,7 +489,7 @@ class GaussianModel:
             "value": new_values,
         }
 
-        optimizable_tensors = self.cat_tensors_to_optimizer(d)
+        optimizable_tensors = self.cat_tensors_to_optimizer(d, source_indices)
 
         # The sizes may not be the same, which necessitates extending the arrays
         # used for interpolation
@@ -500,19 +506,6 @@ class GaussianModel:
             # Extend these tensors to avoid size mismatches during interpolation
             self.last_interpolated_xyz = torch.cat(
                 (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]),
-                dim=0,
-            )
-            self._values = torch.cat(
-                (
-                    self._values,
-                    self.inverse_values_activation(
-                        torch.tensor(
-                            np.zeros((new_size - old_size, 1)),
-                            dtype=torch.float,
-                            device="cuda",
-                        )
-                    ),
-                ),
                 dim=0,
             )
 
@@ -567,7 +560,7 @@ class GaussianModel:
         new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
-            new_xyz, new_opacity, new_scaling, new_rotation, new_values
+            new_xyz, new_opacity, new_scaling, new_rotation, new_values, selected_pts_mask
         )
 
         prune_filter = torch.cat(
@@ -601,6 +594,7 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_values,
+            selected_pts_mask
         )
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad):

@@ -142,7 +142,7 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5):
         indices = np.arange(num_points)
         bins = np.linspace(0, num_points, num_steps+1).astype(int)
         
-        for arr in [((indices >= start) & (indices < end)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
+        for arr in [((indices >= start - 1) & (indices < end + 1)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
             arr = arr * 0.5
             opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
 
