@@ -263,7 +263,8 @@ def training(
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
-                        1
+                        1,
+                        1e-3
                     )
 
                 if (
