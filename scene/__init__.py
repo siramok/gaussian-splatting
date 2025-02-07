@@ -50,7 +50,9 @@ class Scene:
         self.test_cameras = {}
 
         raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
-        if os.path.exists(os.path.join(args.source_path, "data.vtui")):
+        if os.path.exists(os.path.join(args.source_path, "data.vtu")) or os.path.exists(
+            os.path.join(args.source_path, "data.vtui")
+        ):
             scene_info = readVtuSceneInfo(
                 args.source_path,
                 args.colormaps,

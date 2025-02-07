@@ -450,7 +450,7 @@ class GaussianModel:
                     exp_avg_sq = stored_state["exp_avg_sq"][source_indices].clone()
                 else:
                     exp_avg = torch.zeros_like(extension_tensor)
-                    exp_avg_sq = torch.zeros_like(extension_tensor)   
+                    exp_avg_sq = torch.zeros_like(extension_tensor)
                 stored_state["exp_avg"] = torch.cat(
                     (stored_state["exp_avg"], exp_avg), dim=0
                 )
@@ -479,7 +479,13 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(
-        self, new_xyz, new_opacities, new_scaling, new_rotation, new_values, source_indices
+        self,
+        new_xyz,
+        new_opacities,
+        new_scaling,
+        new_rotation,
+        new_values,
+        source_indices,
     ):
         d = {
             "xyz": new_xyz,
@@ -560,7 +566,12 @@ class GaussianModel:
         new_values = self._values[selected_pts_mask].repeat(N, 1)
 
         self.densification_postfix(
-            new_xyz, new_opacity, new_scaling, new_rotation, new_values, selected_pts_mask
+            new_xyz,
+            new_opacity,
+            new_scaling,
+            new_rotation,
+            new_values,
+            selected_pts_mask,
         )
 
         prune_filter = torch.cat(
@@ -594,17 +605,18 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_values,
-            selected_pts_mask
+            selected_pts_mask,
         )
 
-    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad, min_size):
+    def densify_and_prune(
+        self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad, min_size
+    ):
         # opac_grads = self._opacity.grad.clone()
         # opac_grads = torch.cat([opac_grads, torch.zeros((self._opacity.size(0) - opac_grads.size(0), 1), device="cuda")])
         prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
         # prune_mask = (self.get_opacity < min_opacity).squeeze()
         prune_mask = torch.logical_or(
-            prune_mask,
-            torch.max(self.get_scaling, dim=1).values < min_size
+            prune_mask, torch.max(self.get_scaling, dim=1).values < min_size
         )
         # if max_screen_size:
         #     big_points_vs = self.max_radii2D > max_screen_size
