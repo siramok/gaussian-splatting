@@ -9,6 +9,7 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import json
 import os
 import sys
 import uuid
@@ -53,10 +54,12 @@ def training(
     checkpoint_iterations,
     checkpoint,
     debug_from,
-    interpolate_until
+    interpolate_until,
 ):
     first_iter = 0
-    colormap_tables, derivatives = create_colormaps(dataset.colormaps, dataset.num_control_points)
+    colormap_tables, derivatives = create_colormaps(
+        dataset.colormaps, dataset.num_control_points
+    )
     opacity_tables, opac_derivatives = create_opacitymaps()
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
@@ -233,8 +236,8 @@ def training(
                     background,
                     colormap_tables[viewpoint_cam.colormap_id],
                     derivatives[viewpoint_cam.colormap_id],
-                    opacity_tables[viewpoint_cam.opacitymap_id], 
-                    opac_derivatives[viewpoint_cam.opacitymap_id]
+                    opacity_tables[viewpoint_cam.opacitymap_id],
+                    opac_derivatives[viewpoint_cam.opacitymap_id],
                 ),
                 dataset.train_test_exp,
             )
@@ -264,7 +267,7 @@ def training(
                         scene.cameras_extent,
                         size_threshold,
                         1,
-                        1e-3
+                        1e-3,
                     )
 
                 if (
@@ -399,6 +402,42 @@ def training_report(
         torch.cuda.empty_cache()
 
 
+def save_args_to_json(args, dataset_args, opt_args, pipe_args):
+    args_dict = vars(args)
+
+    # Ensure dataset has a valid model path
+    model_path = dataset_args.model_path
+    if not model_path:
+        print("Warning: model_path is not set. Arguments will not be saved.")
+        return
+
+    os.makedirs(model_path, exist_ok=True)
+
+    op_args_dict = vars(opt_args) if hasattr(opt_args, "__dict__") else opt_args
+    pp_args_dict = vars(pipe_args) if hasattr(pipe_args, "__dict__") else pipe_args
+
+    dataset_dict = {
+        k: v
+        for k, v in vars(dataset_args).items()
+        if not callable(v) and not k.startswith("__")
+    }
+
+    # Merge all argument dictionaries
+    all_args = {
+        "main_args": args_dict,
+        "dataset_args": dataset_dict,
+        "optimization_args": op_args_dict,
+        "pipeline_args": pp_args_dict,
+    }
+
+    # Save merged arguments to JSON
+    args_dump_path = os.path.join(model_path, "all_args.json")
+    with open(args_dump_path, "w") as f:
+        json.dump(all_args, f, indent=4)
+
+    print(f"Arguments saved to {args_dump_path}")
+
+
 if __name__ == "__main__":
     window = create_window()
     # Set up command line argument parser
@@ -466,22 +505,25 @@ if __name__ == "__main__":
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    dataset = lp.extract(args)
-    dataset.colormaps = validate_colormaps(dataset.colormaps)
-    dataset.num_control_points = args.num_control_points
-    dataset.resolution = args.resolution
-    dataset.spacing = args.spacing
+    dataset_args = lp.extract(args)
+    dataset_args.colormaps = validate_colormaps(dataset_args.colormaps)
+    dataset_args.num_control_points = args.num_control_points
+    dataset_args.resolution = args.resolution
+    dataset_args.spacing = args.spacing
+    opt_args = op.extract(args)
+    pipe_args = pp.extract(args)
     training(
-        dataset,
-        op.extract(args),
-        pp.extract(args),
+        dataset_args,
+        opt_args,
+        pipe_args,
         args.test_iterations,
         args.save_iterations,
         args.checkpoint_iterations,
         args.start_checkpoint,
         args.debug_from,
-        args.interpolate_until
+        args.interpolate_until,
     )
 
     # All done
+    save_args_to_json(args, dataset_args, opt_args, pipe_args)
     print("\nTraining complete.")
