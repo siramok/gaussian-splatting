@@ -60,7 +60,9 @@ def training(
     colormap_tables, derivatives = create_colormaps(
         dataset.colormaps, dataset.num_control_points
     )
-    opacity_tables, opac_derivatives = create_opacitymaps()
+    opacity_tables, opac_derivatives = create_opacitymaps(
+        num_steps=dataset.opacity_steps
+    )
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
     scene = Scene(dataset, gaussians, opacity_tables)
@@ -266,8 +268,8 @@ def training(
                         0.005,
                         scene.cameras_extent,
                         size_threshold,
-                        1,
-                        1e-3,
+                        dataset_args.max_opac_grad,
+                        dataset_args.min_gaussian_size,
                     )
 
                 if (
@@ -492,6 +494,21 @@ if __name__ == "__main__":
         type=validate_spacing,
         default=(1, 1, 1),
     )
+    parser.add_argument(
+        "--opacity_steps",
+        type=int,
+        default=5,
+    )
+    parser.add_argument(
+        "--max_opac_grad",
+        type=float,
+        default=1,
+    )
+    parser.add_argument(
+        "--min_gaussian_size",
+        type=float,
+        default=0.001,
+    )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -510,6 +527,9 @@ if __name__ == "__main__":
     dataset_args.num_control_points = args.num_control_points
     dataset_args.resolution = args.resolution
     dataset_args.spacing = args.spacing
+    dataset_args.opacity_steps = args.opacity_steps
+    dataset_args.max_opac_grad = args.max_opac_grad
+    dataset_args.min_gaussian_size = args.min_gaussian_size
     opt_args = op.extract(args)
     pipe_args = pp.extract(args)
     training(
