@@ -172,7 +172,7 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
                     else:
                         dist = abs(x - center)
                     # Make opacity 1 at center and 0 at furthest point from center
-                    arr[i] = max(0, 1 - (dist * 2 * slope))
+                    arr[i] = max(0, 1 - (dist * 2 * slope * (num_steps / 2)))
                 
                 opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
                 

@@ -613,11 +613,9 @@ class GaussianModel:
     ):
         # opac_grads = self._opacity.grad.clone()
         # opac_grads = torch.cat([opac_grads, torch.zeros((self._opacity.size(0) - opac_grads.size(0), 1), device="cuda")])
-        prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
+        # prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
         # prune_mask = (self.get_opacity < min_opacity).squeeze()
-        prune_mask = torch.logical_or(
-            prune_mask, torch.max(self.get_scaling, dim=1).values < min_size
-        )
+        prune_mask = (torch.max(self.get_scaling, dim=1).values < min_size)
         # if max_screen_size:
         #     big_points_vs = self.max_radii2D > max_screen_size
         #     big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
