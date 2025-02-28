@@ -398,6 +398,13 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     print(f"Mesh size: {len(mesh.points)} points")
     array_name = mesh.array_names[0]
 
+    edges = mesh.extract_all_edges()
+    edge_lengths = edges.compute_cell_sizes()["Length"]
+    non_zero_lengths = edge_lengths[edge_lengths > 1e-10]
+    min_edge_length = np.min(non_zero_lengths)
+
+    print(f"Mesh's smallest edge length: {min_edge_length}")
+
     # Value rescaling
     values = mesh.get_array(array_name).astype(np.float32).reshape(-1, 1)
     values_min = values.min()
@@ -439,7 +446,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
                 diffuse=0.0,
                 specular=0.0,
                 ambient=1.0,
-                opacity_unit_distance=None,
+                opacity_unit_distance=min_edge_length,
             )
 
             # Reset the camera position and focal point, since we translated the mesh
@@ -526,10 +533,10 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
 
     pl.close()
 
-    mesh_dropout, values_dropout = density_based_dropout(
-        mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
-    )
-    # mesh_dropout, values_dropout = random_dropout(mesh, values, 0.9999)
+    # mesh_dropout, values_dropout = density_based_dropout(
+    #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
+    # )
+    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.99)
     mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply

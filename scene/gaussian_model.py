@@ -433,7 +433,7 @@ class GaussianModel:
             valid_points_mask.detach().cpu().numpy()
         ]
 
-    def cat_tensors_to_optimizer(self, tensors_dict, source_indices):
+    def cat_tensors_to_optimizer(self, tensors_dict, source_indices, mode):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             requires_grad = True
@@ -448,6 +448,9 @@ class GaussianModel:
                 if group["name"] == "value":
                     exp_avg = stored_state["exp_avg"][source_indices].clone()
                     exp_avg_sq = stored_state["exp_avg_sq"][source_indices].clone()
+                    if mode == "split":
+                        exp_avg = exp_avg.repeat(2, 1)
+                        exp_avg_sq = exp_avg_sq.repeat(2, 1)
                 else:
                     exp_avg = torch.zeros_like(extension_tensor)
                     exp_avg_sq = torch.zeros_like(extension_tensor)
@@ -486,6 +489,7 @@ class GaussianModel:
         new_rotation,
         new_values,
         source_indices,
+        mode
     ):
         d = {
             "xyz": new_xyz,
@@ -495,7 +499,7 @@ class GaussianModel:
             "value": new_values,
         }
 
-        optimizable_tensors = self.cat_tensors_to_optimizer(d, source_indices)
+        optimizable_tensors = self.cat_tensors_to_optimizer(d, source_indices, mode)
 
         # The sizes may not be the same, which necessitates extending the arrays
         # used for interpolation
@@ -528,7 +532,6 @@ class GaussianModel:
         self.interpolation_mask = interpolation_mask
         # Only bother interpolating if there are any points that need updating
         self.should_interpolate = np.any(interpolation_mask)
-
         self._xyz = optimizable_tensors["xyz"]
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
@@ -572,6 +575,7 @@ class GaussianModel:
             new_rotation,
             new_values,
             selected_pts_mask,
+            "split"
         )
 
         prune_filter = torch.cat(
@@ -606,6 +610,7 @@ class GaussianModel:
             new_rotation,
             new_values,
             selected_pts_mask,
+            "clone"
         )
 
     def densify_and_prune(
@@ -616,6 +621,7 @@ class GaussianModel:
         # prune_mask = (self._opacity.grad > max_opac_grad).squeeze()
         # prune_mask = (self.get_opacity < min_opacity).squeeze()
         prune_mask = (torch.max(self.get_scaling, dim=1).values < min_size)
+        # print(prune_mask.shape)
         # if max_screen_size:
         #     big_points_vs = self.max_radii2D > max_screen_size
         #     big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
