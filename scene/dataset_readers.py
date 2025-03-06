@@ -10,6 +10,7 @@
 #
 
 import os
+import gc
 import random
 import shutil
 from typing import NamedTuple
@@ -102,39 +103,21 @@ def arrayFromVTKMatrix(vmatrix):
     return narray.astype(np.float32)
 
 
-def random_dropout_raw(mesh, values, dropout_percentage):
+def random_dropout(mesh, values, dropout_percentage):
     num_points = mesh.n_points
-    num_drop = int(num_points * dropout_percentage)
-    # Generate random indices for dropout
-    drop_indices = random.sample(range(num_points), num_drop)
-
-    # Create a mask to exclude dropped points
-    mask = np.ones(num_points, dtype=bool)
-    mask[drop_indices] = False
-
+    
+    # Create a random boolean mask directly (more memory efficient)
+    keep_percentage = 1 - dropout_percentage
+    mask = np.random.random(num_points) < keep_percentage
+    
     # Apply the mask to the points and values
-    points = mesh.points
-    values = mesh.point_data["value"]
-
-    new_points = points[mask]
-    new_values = values[mask]
-
+    new_points = mesh.points[mask]
+    new_values = mesh.point_data["value"][mask]
+    
     # Create a new PyVista PolyData mesh
     new_mesh = pv.PolyData(new_points)
     new_mesh.point_data["value"] = new_values
 
-    return new_mesh, new_values
-
-
-def random_dropout(mesh, values, dropout_percentage):
-    num_points = mesh.n_points
-    num_drop = int(num_points * dropout_percentage)
-    drop_indices = random.sample(range(num_points), num_drop)
-    mask = np.ones(num_points, dtype=bool)
-    mask[drop_indices] = False
-    new_points = mesh.points[mask]
-    new_values = values[mask]
-    new_mesh = pv.PolyData(new_points)
     return new_mesh, new_values
 
 
@@ -232,13 +215,13 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
         raise ValueError("Data size does not match the specified dimensions.")
 
     # Reshape data into a 3D array and normalize to [0, 1]
-    values = values.astype(np.float32).reshape(dimensions)
+    values = values.astype(np.float32).reshape(dimensions, order='F')
     values_min = values.min()
     values_max = values.max()
     values = (values - values_min) / (values_max - values_min)
 
     mesh = pv.ImageData()
-    mesh.dimensions = np.array(dimensions)
+    mesh.dimensions = np.array(values.shape)
     mesh.spacing = spacing
     mesh.point_data["value"] = values.ravel(order="F").astype(np.float32)
 
@@ -361,10 +344,8 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
                     image_counter += 1
 
-    pl.close()
-
     dropout_percentage = 0.995
-    mesh_dropout, values_dropout = random_dropout_raw(mesh, values, dropout_percentage)
+    mesh_dropout, values_dropout = random_dropout(mesh, values, dropout_percentage)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
@@ -373,6 +354,22 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
         mesh_dropout,
         values_dropout.ravel(order="F"),
     )
+        
+    # Close the plotter explicitly
+    if 'pl' in locals():
+        pl.close()
+        del pl
+        
+    # Delete large arrays to free memory
+    if 'values' in locals():
+        del values
+    if 'values_dropout' in locals():
+        del values_dropout
+    if 'mesh_dropout' in locals():
+        del mesh_dropout
+        
+    # Force garbage collection
+    gc.collect()
 
     return cam_infos, mesh
 
