@@ -226,8 +226,8 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     mesh.point_data["value"] = values.ravel(order="F").astype(np.float32)
 
     # Point scaling
-    points_min = np.min(mesh.points, axis=0)
-    points_max = np.max(mesh.points, axis=0)
+    points_min = np.array(mesh.origin)
+    points_max = points_min + (np.array(mesh.dimensions) - 1) * np.array(mesh.spacing)
     points_max_abs = max(np.max(np.abs(points_min)), np.max(np.abs(points_max)))
 
     if points_max_abs > 1:
