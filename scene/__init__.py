@@ -31,6 +31,7 @@ class Scene:
         load_iteration=None,
         shuffle=True,
         resolution_scales=[1.0],
+        train_values = True,
     ):
         self.model_path = args.model_path
         self.loaded_iter = None
@@ -49,7 +50,7 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        raw_files = [f for f in os.listdir(args.source_path) if f.endswith(".raw")]
+        raw_files = [f for f in os.listdir(args.source_path) if f.endswith("uint8.raw")]
         if os.path.exists(os.path.join(args.source_path, "data.vtu")) or os.path.exists(
             os.path.join(args.source_path, "data.vtui")
         ):
@@ -60,6 +61,7 @@ class Scene:
                 args.num_control_points,
                 args.resolution,
                 args.eval,
+                train_values
             )
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
@@ -71,6 +73,7 @@ class Scene:
                 args.resolution,
                 args.spacing,
                 args.eval,
+                train_values
             )
         else:
             raise FileNotFoundError(
@@ -117,6 +120,7 @@ class Scene:
             )
 
         if self.loaded_iter:
+            # TODO: fix if mesh not saved
             self.gaussians.load_ply(
                 os.path.join(
                     self.model_path,
@@ -128,12 +132,21 @@ class Scene:
                 args.train_test_exp,
             )
         else:
-            self.gaussians.create_from_pcd(
-                scene_info.point_cloud,
-                scene_info.train_cameras,
-                self.cameras_extent,
-                scene_info.mesh,
-            )
+            if not train_values:
+                self.gaussians.create_from_pcd(
+                    scene_info.point_cloud,
+                    scene_info.train_cameras,
+                    self.cameras_extent,
+                    scene_info.bounding_box,
+                    scene_info.mesh,
+                )
+            else:
+                self.gaussians.create_from_pcd(
+                    scene_info.point_cloud,
+                    scene_info.train_cameras,
+                    self.cameras_extent,
+                    scene_info.bounding_box
+                )
 
     def save(self, iteration):
         point_cloud_path = os.path.join(

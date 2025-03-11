@@ -65,7 +65,7 @@ def training(
     )
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
-    scene = Scene(dataset, gaussians, opacity_tables)
+    scene = Scene(dataset, gaussians, opacity_tables, train_values=opt.train_values)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -477,7 +477,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--interpolate_until",
         type=int,
-        default=1,
+        default=0,
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)

@@ -148,8 +148,10 @@ class GaussianModel:
         pcd: BasicPointCloud,
         cam_infos: int,
         spatial_lr_scale: float,
-        mesh: pv.PolyData,
+        bounding_box: list,
+        mesh: pv.PolyData = None,
     ):
+        self.bounding_box = bounding_box
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
 
@@ -187,10 +189,11 @@ class GaussianModel:
         exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
-        self.process_mesh(mesh)
-        self.last_interpolated_xyz = self._xyz.clone()
-        self.interpolation_mask = np.full(self._xyz.shape[0], True)
-        self.should_interpolate = True
+        if not self.train_values:
+            self.process_mesh(mesh)
+            self.last_interpolated_xyz = self._xyz.clone()
+            self.interpolation_mask = np.full(self._xyz.shape[0], True)
+            self.should_interpolate = True
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -293,7 +296,7 @@ class GaussianModel:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path, mesh, use_train_test_exp=False):
+    def load_ply(self, path, mesh = None, use_train_test_exp=False):
         plydata = PlyData.read(path)
         if use_train_test_exp:
             exposure_file = os.path.join(
@@ -363,9 +366,10 @@ class GaussianModel:
             )
         )
 
-        self.process_mesh(mesh)
-        self.last_interpolated_xyz = self._xyz.clone()
-        self.interpolation_mask = np.full(len(self._values), True)
+        if not self.train_values:
+            self.process_mesh(mesh)
+            self.last_interpolated_xyz = self._xyz.clone()
+            self.interpolation_mask = np.full(len(self._values), True)
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
@@ -428,10 +432,11 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
-        self.last_interpolated_xyz = self.last_interpolated_xyz[valid_points_mask]
-        self.interpolation_mask = self.interpolation_mask[
-            valid_points_mask.detach().cpu().numpy()
-        ]
+        if not self.train_values:
+            self.last_interpolated_xyz = self.last_interpolated_xyz[valid_points_mask]
+            self.interpolation_mask = self.interpolation_mask[
+                valid_points_mask.detach().cpu().numpy()
+            ]
 
     def cat_tensors_to_optimizer(self, tensors_dict, source_indices, mode):
         optimizable_tensors = {}
@@ -501,37 +506,38 @@ class GaussianModel:
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d, source_indices, mode)
 
-        # The sizes may not be the same, which necessitates extending the arrays
-        # used for interpolation
-        new_size = optimizable_tensors["xyz"].shape[0]
-        old_size = self._xyz.shape[0]
+        if not self.train_values:
+            # The sizes may not be the same, which necessitates extending the arrays
+            # used for interpolation
+            new_size = optimizable_tensors["xyz"].shape[0]
+            old_size = self._xyz.shape[0]
 
-        # We always want the interpolation mask to be the same size as the incoming xyz tensor
-        interpolation_mask = np.full(new_size, False)
+            # We always want the interpolation mask to be the same size as the incoming xyz tensor
+            interpolation_mask = np.full(new_size, False)
 
-        if new_size > old_size:
-            # Always interpolate the new points
-            interpolation_mask[old_size:] = True
+            if new_size > old_size:
+                # Always interpolate the new points
+                interpolation_mask[old_size:] = True
 
-            # Extend these tensors to avoid size mismatches during interpolation
-            self.last_interpolated_xyz = torch.cat(
-                (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]),
-                dim=0,
+                # Extend these tensors to avoid size mismatches during interpolation
+                self.last_interpolated_xyz = torch.cat(
+                    (self.last_interpolated_xyz, optimizable_tensors["xyz"][old_size:]),
+                    dim=0,
+                )
+
+            # Compute the distances between the new points and the last interpolated points
+            new_xyz = optimizable_tensors["xyz"][:old_size]
+            diff = new_xyz - self.last_interpolated_xyz[:old_size]
+            distances = torch.norm(diff, dim=1)
+
+            # If a Gaussian's position has moved more than the threshold, re-interpolate its value
+            interpolation_mask[:old_size] = (
+                (distances > self.interpolation_threshold).detach().cpu().numpy()
             )
 
-        # Compute the distances between the new points and the last interpolated points
-        new_xyz = optimizable_tensors["xyz"][:old_size]
-        diff = new_xyz - self.last_interpolated_xyz[:old_size]
-        distances = torch.norm(diff, dim=1)
-
-        # If a Gaussian's position has moved more than the threshold, re-interpolate its value
-        interpolation_mask[:old_size] = (
-            (distances > self.interpolation_threshold).detach().cpu().numpy()
-        )
-
-        self.interpolation_mask = interpolation_mask
-        # Only bother interpolating if there are any points that need updating
-        self.should_interpolate = np.any(interpolation_mask)
+            self.interpolation_mask = interpolation_mask
+            # Only bother interpolating if there are any points that need updating
+            self.should_interpolate = np.any(interpolation_mask)
         self._xyz = optimizable_tensors["xyz"]
         self._opacity = optimizable_tensors["opacity"]
         self._scaling = optimizable_tensors["scaling"]
