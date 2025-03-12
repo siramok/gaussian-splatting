@@ -111,7 +111,7 @@ def arrayFromVTKMatrix(vmatrix):
     return narray.astype(np.float32)
 
 
-def random_dropout(mesh, values, dropout_percentage):
+def random_dropout_percentage(mesh, dropout_percentage):
     num_points = mesh.n_points
     
     # Create a random boolean mask directly (more memory efficient)
@@ -128,6 +128,24 @@ def random_dropout(mesh, values, dropout_percentage):
 
     return new_mesh, new_values
 
+def random_dropout_exact(mesh, num_particles_to_keep):
+    num_points = mesh.n_points
+
+    if num_particles_to_keep > num_points:
+        raise ValueError("num_particles_to_keep cannot exceed total number of points.")
+
+    # Randomly select indices without replacement
+    selected_indices = np.random.choice(num_points, size=num_particles_to_keep, replace=False)
+
+    # Extract selected points and associated values
+    new_points = mesh.points[selected_indices]
+    new_values = mesh.point_data["value"][selected_indices]
+
+    # Create a new PyVista PolyData mesh
+    new_mesh = pv.PolyData(new_points)
+    new_mesh.point_data["value"] = new_values
+
+    return new_mesh, new_values
 
 def density_based_dropout(
     mesh, values, high_density_dropout, low_density_dropout, n_neighbors=10
@@ -182,6 +200,19 @@ def storeRawPly(path, mesh, values):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
+def is_image_too_dark(image, threshold=0.01, dark_ratio=0.99):
+
+    # Normalize the image
+    if image.max() > 1:
+        image = image / 255.0
+
+    # Count the number of dark pixels that fall below our threshold
+    dark_pixels = (image < threshold).sum()
+    total_pixels = image.size
+
+    # If the ratio of dark pixels is too high, we don't want to train with it
+    return (dark_pixels / total_pixels) > dark_ratio
+
 
 def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing):
     # Directory setup
@@ -194,7 +225,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     width = resolution
     height = resolution
     ratio = width / height
-    pv.start_xvfb()
+    #pv.start_xvfb()
     pl = pv.Plotter(off_screen=True)
     pl.window_size = [width, height]
     # print(pv.get_gpu_info())
@@ -251,6 +282,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
     cam_infos = []
     image_counter = 0
+    throwaway_counter = 0
 
     for opacitymap_id, opacitymap in enumerate(opacitymaps):
         for colormap_id, colormap in enumerate(colormaps):
@@ -294,11 +326,17 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
                     # Produce a new render at the new camera position
                     pl.render()
+                    
+                    img = pl.screenshot(None, return_img=True)
+
+                    if is_image_too_dark(img):
+                        throwaway_counter += 1
+                        continue
 
                     # Save the render as a new image
                     image_name = f"{colormap}_omap{opacitymap_id}_{image_counter:05d}.png"
                     image_path = os.path.join(image_dir, image_name)
-                    pl.screenshot(image_path)
+                    plt.imsave(image_path, img)
 
                     mvt_matrix = np.linalg.inv(
                         arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
@@ -352,8 +390,11 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
                     image_counter += 1
 
-    dropout_percentage = 0.995
-    mesh_dropout, values_dropout = random_dropout(mesh, values, dropout_percentage)
+
+    print(f"Number of images generated: {image_counter}")
+    print(f"Number of images thrown away due to darkness: {throwaway_counter}")
+
+    mesh_dropout, values_dropout = random_dropout_exact(mesh, 100_000)
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
@@ -393,7 +434,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     width = resolution
     height = resolution
     ratio = width / height
-    pv.start_xvfb()
+    # pv.start_xvfb()
     pl = pv.Plotter(off_screen=True)
     pl.window_size = [width, height]
     # print(pv.get_gpu_info())
@@ -435,6 +476,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
 
     cam_infos = []
     image_counter = 0
+    throwaway_counter = 0
 
     for opacitymap_id, opacitymap in enumerate(opacitymaps):
         for colormap_id, colormap in enumerate(colormaps):
@@ -479,10 +521,16 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
                     # Produce a new render at the new camera position
                     pl.render()
 
+                    img = pl.screenshot(None, return_img=True)
+
+                    if is_image_too_dark(img):
+                        throwaway_counter += 1
+                        continue
+
                     # Save the render as a new image
                     image_name = f"{colormap}_omap{opacitymap_id}_{image_counter:05d}.png"
                     image_path = os.path.join(image_dir, image_name)
-                    pl.screenshot(image_path)
+                    plt.imsave(image_path, img)
 
                     mvt_matrix = np.linalg.inv(
                         arrayFromVTKMatrix(camera.GetModelViewTransformMatrix())
@@ -538,10 +586,13 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
 
     pl.close()
 
+    print(f"Number of images generated: {image_counter}")
+    print(f"Number of images thrown away due to darkness: {throwaway_counter}")
+
     # mesh_dropout, values_dropout = density_based_dropout(
     #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
     # )
-    mesh_dropout, values_dropout = random_dropout(mesh, values, 0.99)
+    mesh_dropout, values_dropout = random_dropout_percentage(mesh, 0.99)
     mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
