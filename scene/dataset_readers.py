@@ -276,7 +276,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
-    offset[2] -= 4
+    offset[2] -= 3
     offset = [-x for x in offset]
     mesh.origin = offset
 
@@ -477,7 +477,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
-    offset[2] -= 4
+    offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
