@@ -31,6 +31,7 @@ from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.validate_args import (
     validate_colormaps,
+    validate_dropout,
     validate_resolution,
     validate_spacing,
 )
@@ -502,6 +503,11 @@ if __name__ == "__main__":
         type=float,
         default=0.001,
     )
+    parser.add_argument(
+        "--dropout",
+        type=validate_dropout,
+        default=None
+    )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -523,6 +529,7 @@ if __name__ == "__main__":
     dataset_args.opacity_steps = args.opacity_steps
     dataset_args.max_opac_grad = args.max_opac_grad
     dataset_args.min_gaussian_size = args.min_gaussian_size
+    dataset_args.dropout = args.dropout
     opt_args = op.extract(args)
     pipe_args = pp.extract(args)
     training(

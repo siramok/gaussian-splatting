@@ -214,7 +214,7 @@ def is_image_too_dark(image, threshold=0.01, dark_ratio=0.99):
     return (dark_pixels / total_pixels) > dark_ratio
 
 
-def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing):
+def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -276,7 +276,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
-    offset[2] -= 3
+    offset[2] -= 4
     offset = [-x for x in offset]
     mesh.origin = offset
 
@@ -394,7 +394,14 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     print(f"Number of images generated: {image_counter}")
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
 
-    mesh_dropout, values_dropout = random_dropout_exact(mesh, 100_000)
+    if dropout is None:
+        mesh_dropout = mesh
+        values_dropout = values
+    elif 0.0 <= dropout <= 1.0:
+        mesh_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
+    else:
+        mesh_dropout, values_dropout = random_dropout_exact(mesh, dropout)
+
     mesh_dropout.point_data["value"] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
@@ -423,7 +430,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     return cam_infos, mesh
 
 
-def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution):
+def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -470,7 +477,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
     # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
-    offset[2] -= 3
+    offset[2] -= 4
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
 
@@ -588,11 +595,15 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
 
     print(f"Number of images generated: {image_counter}")
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
+    
+    if dropout is None:
+        mesh_dropout = mesh
+        values_dropout = values
+    elif 0.0 <= dropout <= 1.0:
+        mesh_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
+    else:
+        mesh_dropout, values_dropout = random_dropout_exact(mesh, dropout)
 
-    # mesh_dropout, values_dropout = density_based_dropout(
-    #     mesh, values, high_density_dropout=0.65, low_density_dropout=0.35
-    # )
-    mesh_dropout, values_dropout = random_dropout_percentage(mesh, 0.99)
     mesh_dropout.point_data[array_name] = values_dropout.ravel()
 
     # Save the scaled and translated mesh as input.ply
@@ -629,10 +640,10 @@ def getDirectppNorm(cam_info):
 
 
 def readRawSceneInfo(
-    path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, eval, train_values, llffhold=8
+    path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, eval, train_values, dropout, llffhold=8
 ):
     cam_infos, mesh = buildRawDataset(
-        path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing
+        path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout
     )
 
     if eval:
@@ -681,8 +692,8 @@ def readRawSceneInfo(
     return scene_info
 
 
-def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolution, eval, train_values, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution)
+def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolution, eval, train_values, dropout, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout)
 
     if eval:
         train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]

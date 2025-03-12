@@ -52,3 +52,15 @@ def validate_spacing(spacing):
         raise ArgumentTypeError(
             "Invalid spacing. Must be a comma-separated list of 3 positive numbers e.g 1,1,1"
         )
+
+def validate_dropout(value):
+    try:
+        fvalue = float(value)
+    except ValueError:
+        raise ArgumentTypeError("Dropout must be a numeric value.")
+    
+    # If the value is less than 1, treat it as a dropout percentage else an exact number to keep
+    if fvalue < 1:
+        return fvalue
+    else:
+        return int(fvalue)

@@ -61,7 +61,8 @@ class Scene:
                 args.num_control_points,
                 args.resolution,
                 args.eval,
-                train_values
+                train_values,
+                args.dropout
             )
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
@@ -73,7 +74,8 @@ class Scene:
                 args.resolution,
                 args.spacing,
                 args.eval,
-                train_values
+                train_values,
+                args.dropout
             )
         else:
             raise FileNotFoundError(
