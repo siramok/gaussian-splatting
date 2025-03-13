@@ -506,7 +506,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dropout",
         type=validate_dropout,
-        default=None
+        default=0.99
     )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
