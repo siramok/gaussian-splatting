@@ -122,7 +122,6 @@ class Scene:
             )
 
         if self.loaded_iter:
-            # TODO: fix if mesh not saved
             self.gaussians.load_ply(
                 os.path.join(
                     self.model_path,
@@ -130,7 +129,6 @@ class Scene:
                     "iteration_" + str(self.loaded_iter),
                     "point_cloud.ply",
                 ),
-                scene_info.mesh,
                 args.train_test_exp,
             )
         else:

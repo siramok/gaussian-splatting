@@ -75,7 +75,6 @@ def fetchPly(path):
 
 def storePly(path, xyz, values):
     values = values.reshape(-1, 1)
-    print(xyz.shape, values.shape)
     if xyz.shape[0] != values.shape[0]:
         raise ValueError(
             f"Mismatch in number of points: mesh has {xyz.shape[0]} points, "
@@ -663,7 +662,6 @@ def readRawSceneInfo(
     ply_path = os.path.join(path, "input.ply")
     pcd = fetchPly(ply_path)
 
-    print(mesh.points.shape)
     min_x, max_x = mesh.points[:, 0].min(), mesh.points[:, 0].max()
     min_y, max_y = mesh.points[:, 1].min(), mesh.points[:, 1].max()
     min_z, max_z = mesh.points[:, 2].min(), mesh.points[:, 2].max()

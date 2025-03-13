@@ -51,7 +51,7 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-    def __init__(self, train_opacity=False, train_values=False):
+    def __init__(self, train_opacity=False, train_values=True):
         self._xyz = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
@@ -260,7 +260,7 @@ class GaussianModel:
                 return lr
 
     def construct_list_of_attributes(self):
-        attributes = ["x", "y", "z", "value", "opacity"]
+        attributes = ["x", "y", "z", "value"]
         for i in range(self._scaling.shape[1]):
             attributes.append("scale_{}".format(i))
         for i in range(self._rotation.shape[1]):
@@ -271,7 +271,6 @@ class GaussianModel:
         mkdir_p(os.path.dirname(path))
 
         xyz = self._xyz.detach().cpu().numpy()
-        opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
         values = self._values.detach().cpu().numpy()
@@ -281,7 +280,7 @@ class GaussianModel:
         ]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, values, opacities, scale, rotation), axis=1)
+        attributes = np.concatenate((xyz, values, scale, rotation), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
@@ -296,7 +295,7 @@ class GaussianModel:
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
 
-    def load_ply(self, path, mesh = None, use_train_test_exp=False):
+    def load_ply(self, path, use_train_test_exp=False):
         plydata = PlyData.read(path)
         if use_train_test_exp:
             exposure_file = os.path.join(
@@ -324,7 +323,15 @@ class GaussianModel:
             ),
             axis=1,
         )
-        opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
+        if plydata.elements[0].get("opacity"):
+            opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
+        else:
+            opacities = self.inverse_opacity_activation(
+                (0.01)
+                * torch.ones(
+                    (xyz.shape[0], 1), dtype=torch.float, device="cuda"
+                )
+            )
 
         scale_names = [
             p.name
@@ -349,16 +356,16 @@ class GaussianModel:
         self._xyz = nn.Parameter(
             torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True)
         )
-        self._opacity = nn.Parameter(
-            torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(
-                self.train_opacity
-            )
-        )
         self._scaling = nn.Parameter(
             torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True)
         )
         self._rotation = nn.Parameter(
             torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True)
+        )
+        self._opacity = nn.Parameter(
+            torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(
+                self.train_opacity
+            )
         )
         self._values = nn.Parameter(
             torch.tensor(values, dtype=torch.float, device="cuda").requires_grad_(
