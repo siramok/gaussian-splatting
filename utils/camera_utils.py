@@ -34,16 +34,12 @@ def loadCam(args, id, cam_info, resolution_scale, is_test_dataset):
             raise
         except IOError:
             print(
-                f"Error: Unable to open the image file '{
-                    cam_info.depth_path
-                }'. It may be corrupted or an unsupported format."
+                f"Error: Unable to open the image file '{cam_info.depth_path}'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
-                f"An unexpected error occurred when trying to read depth at {
-                    cam_info.depth_path
-                }: {e}"
+                f"An unexpected error occurred when trying to read depth at {cam_info.depth_path}: {e}"
             )
             raise
     else:
@@ -110,16 +106,12 @@ def loadDirect(args, id, cam_info, resolution_scale, is_test_dataset):
             raise
         except IOError:
             print(
-                f"Error: Unable to open the image file '{
-                    cam_info.depth_path
-                }'. It may be corrupted or an unsupported format."
+                f"Error: Unable to open the image file '{cam_info.depth_path}'. It may be corrupted or an unsupported format."
             )
             raise
         except Exception as e:
             print(
-                f"An unexpected error occurred when trying to read depth at {
-                    cam_info.depth_path
-                }: {e}"
+                f"An unexpected error occurred when trying to read depth at {cam_info.depth_path}: {e}"
             )
             raise
     else:
