@@ -266,11 +266,10 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     # Point scaling
     points_min = np.array(mesh.origin)
     points_max = points_min + (np.array(mesh.dimensions) - 1) * np.array(mesh.spacing)
-    points_max_abs = max(np.max(np.abs(points_min)), np.max(np.abs(points_max)))
-
-    if points_max_abs > 1:
-        scale_factor = 1.0 / points_max_abs
-        mesh.spacing = (scale_factor, scale_factor, scale_factor)
+    extents = points_max - points_min
+    max_extent = np.max(extents)
+    scale_factor = 1.0 / max_extent
+    mesh.spacing = tuple(np.array(mesh.spacing) * scale_factor)
 
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
