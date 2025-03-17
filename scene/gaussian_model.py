@@ -323,7 +323,7 @@ class GaussianModel:
             ),
             axis=1,
         )
-        if plydata.elements[0].get("opacity"):
+        if "opacity" in plydata.elements[0].properties:
             opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
         else:
             opacities = self.inverse_opacity_activation(

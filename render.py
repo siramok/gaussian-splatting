@@ -24,7 +24,7 @@ from gaussian_renderer import GaussianModel, render
 from scene import Scene
 from utils.general_utils import safe_state
 from utils.graphics_utils import create_colormaps, create_opacitymaps
-from utils.validate_args import validate_colormaps, validate_resolution, validate_spacing
+from utils.validate_args import validate_colormaps, validate_resolution, validate_spacing, validate_dropout
 
 
 def render_set(
@@ -115,9 +115,14 @@ if __name__ == "__main__":
         default="medium",
     )
     parser.add_argument(
-        "--spacing",
-        type=validate_spacing,
-        default=(1, 1, 1),
+        "--opacity_steps",
+        type=int,
+        default=5,
+    )
+    parser.add_argument(
+        "--dropout",
+        type=validate_dropout,
+        default=0.01
     )
     args = get_combined_args(parser)
     print(f"Colormaps: {args.colormaps}")
@@ -136,6 +141,7 @@ if __name__ == "__main__":
     dataset.num_control_points = args.num_control_points
     dataset.resolution = args.resolution
     dataset.spacing = args.spacing
+    dataset.dropout = args.dropout
     render_sets(
         dataset,
         args.iteration,
