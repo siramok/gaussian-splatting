@@ -120,12 +120,24 @@ def random_dropout_percentage(mesh, dropout_percentage):
     # Apply the mask to the points and values
     new_points = mesh.points[mask]
     new_values = mesh.point_data["value"][mask]
-    
-    # Create a new PyVista PolyData mesh
-    new_mesh = pv.PolyData(new_points)
-    new_mesh.point_data["value"] = new_values
 
-    return new_mesh, new_values
+    return new_points, new_values
+
+def cell_centered_random_dropout_percentage(mesh, dropout_percentage):
+    cell_data = mesh.point_data_to_cell_data()
+    cell_centers = mesh.cell_centers().points
+
+    num_points = mesh.n_cells
+    
+    # Create a random boolean mask directly (more memory efficient)
+    keep_percentage = 1 - dropout_percentage
+    mask = np.random.random(num_points) < keep_percentage
+    
+    # Apply the mask to the points and values
+    new_points = cell_centers[mask]
+    new_values = cell_data["value"][mask]
+
+    return new_points, new_values
 
 def random_dropout_exact(mesh, num_particles_to_keep):
     num_points = mesh.n_points
@@ -140,11 +152,25 @@ def random_dropout_exact(mesh, num_particles_to_keep):
     new_points = mesh.points[selected_indices]
     new_values = mesh.point_data["value"][selected_indices]
 
-    # Create a new PyVista PolyData mesh
-    new_mesh = pv.PolyData(new_points)
-    new_mesh.point_data["value"] = new_values
+    return new_points, new_values
 
-    return new_mesh, new_values
+def cell_centered_random_dropout_exact(mesh, num_particles_to_keep):
+    num_points = mesh.n_cells
+
+    if num_particles_to_keep > num_points:
+        raise ValueError("num_particles_to_keep cannot exceed total number of points.")
+    
+    cell_data = mesh.point_data_to_cell_data()
+    cell_centers = mesh.cell_centers().points
+
+    # Randomly select indices without replacement
+    selected_indices = np.random.choice(num_points, size=num_particles_to_keep, replace=False)
+
+    # Extract selected points and associated values
+    new_points = cell_centers[selected_indices]
+    new_values = cell_data["value"][selected_indices]
+
+    return new_points, new_values
 
 def density_based_dropout(
     mesh, values, high_density_dropout, low_density_dropout, n_neighbors=10
@@ -171,10 +197,8 @@ def density_based_dropout(
     return new_mesh, new_values
 
 
-def storeRawPly(path, mesh, values):
+def storeRawPly(path, xyz, values):
     values = values.reshape(-1, 1)
-
-    xyz = mesh.points  # Shape (N, 3)
 
     if xyz.shape[0] != values.shape[0]:
         raise ValueError(
@@ -199,15 +223,21 @@ def storeRawPly(path, mesh, values):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def is_image_too_dark(image, threshold=0.01, dark_ratio=0.99):
-
+def is_image_too_dark(image, threshold=0.01, dark_ratio=0.999):
     # Normalize the image
     if image.max() > 1:
         image = image / 255.0
 
+    # Convert to grayscale if it's a color image
+    if len(image.shape) == 3 and image.shape[2] == 3:
+        # Simple grayscale conversion - average of channels
+        gray_image = image.mean(axis=2)
+    else:
+        gray_image = image
+
     # Count the number of dark pixels that fall below our threshold
-    dark_pixels = (image < threshold).sum()
-    total_pixels = image.size
+    dark_pixels = (gray_image < threshold).sum()
+    total_pixels = gray_image.size
 
     # If the ratio of dark pixels is too high, we don't want to train with it
     return (dark_pixels / total_pixels) > dark_ratio
@@ -391,21 +421,19 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
     print(f"Number of images generated: {image_counter}")
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
-
+    
     if dropout is None:
-        mesh_dropout = mesh
-        values_dropout = values
+        values_dropout = mesh.point_data_to_cell_data()["value"]
+        points_dropout = mesh.cell_centers().points
     elif 0.0 <= dropout <= 1.0:
-        mesh_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
+        points_dropout, values_dropout = cell_centered_random_dropout_percentage(mesh, dropout)
     else:
-        mesh_dropout, values_dropout = random_dropout_exact(mesh, dropout)
-
-    mesh_dropout.point_data["value"] = values_dropout.ravel()
+        points_dropout, values_dropout = cell_centered_random_dropout_exact(mesh, dropout)
 
     # Save the scaled and translated mesh as input.ply
     storeRawPly(
         os.path.join(path, "input.ply"),
-        mesh_dropout,
+        points_dropout,
         values_dropout.ravel(order="F"),
     )
         
@@ -419,8 +447,6 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
         del values
     if 'values_dropout' in locals():
         del values_dropout
-    if 'mesh_dropout' in locals():
-        del mesh_dropout
         
     # Force garbage collection
     gc.collect()
@@ -449,13 +475,6 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     print(f"Mesh size: {len(mesh.points)} points")
     array_name = mesh.array_names[0]
 
-    edges = mesh.extract_all_edges()
-    edge_lengths = edges.compute_cell_sizes()["Length"]
-    non_zero_lengths = edge_lengths[edge_lengths > 1e-10]
-    min_edge_length = np.min(non_zero_lengths)
-
-    print(f"Mesh's smallest edge length: {min_edge_length}")
-
     # Value rescaling
     values = mesh.get_array(array_name).astype(np.float32).reshape(-1, 1)
     values_min = values.min()
@@ -478,6 +497,13 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
+
+    edges = mesh.extract_all_edges()
+    edge_lengths = edges.compute_cell_sizes()["Length"]
+    non_zero_lengths = edge_lengths[edge_lengths > 1e-10]
+    min_edge_length = np.min(non_zero_lengths)
+
+    print(f"Mesh's smallest edge length: {min_edge_length}")
 
     cam_infos = []
     image_counter = 0
@@ -595,23 +621,21 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
     
     if dropout is None:
-        mesh_dropout = mesh
-        values_dropout = values
+        values_dropout = mesh.point_data_to_cell_data()["value"]
+        points_dropout = mesh.cell_centers().points
     elif 0.0 <= dropout <= 1.0:
-        mesh_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
+        points_dropout, values_dropout = cell_centered_random_dropout_percentage(mesh, dropout)
     else:
-        mesh_dropout, values_dropout = random_dropout_exact(mesh, dropout)
-
-    mesh_dropout.point_data[array_name] = values_dropout.ravel()
+        points_dropout, values_dropout = cell_centered_random_dropout_exact(mesh, dropout)
 
     # Save the scaled and translated mesh as input.ply
     storePly(
         os.path.join(path, "input.ply"),
-        mesh_dropout.points,
+        points_dropout,
         values_dropout,
     )
 
-    return cam_infos, mesh_dropout
+    return cam_infos, mesh
 
 
 def getDirectppNorm(cam_info):
