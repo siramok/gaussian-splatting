@@ -154,6 +154,24 @@ def random_dropout_exact(mesh, num_particles_to_keep):
 
     return new_points, new_values
 
+def true_random_exact(num_points):
+    bounds = [
+        (np.float32(-1.0), np.float32(0.0)),  # x bounds
+        (np.float32(-1.0), np.float32(0.0)),  # y bounds
+        (np.float32(2.0), np.float32(3.0))    # z bounds
+    ]
+    
+    # Initialize array for points
+    new_points = np.zeros((num_points, 3), dtype=np.float32)
+    
+    # Generate random points within the specified bounds
+    for i in range(3):
+        lower, upper = bounds[i]
+        new_points[:, i] = np.random.uniform(lower, upper, num_points)
+    new_values = np.random.random(num_points)
+
+    return new_points, new_values
+
 def cell_centered_random_dropout_exact(mesh, num_particles_to_keep):
     num_points = mesh.n_cells
 
@@ -426,9 +444,9 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
         values_dropout = mesh.point_data_to_cell_data()["value"]
         points_dropout = mesh.cell_centers().points
     elif 0.0 <= dropout <= 1.0:
-        points_dropout, values_dropout = cell_centered_random_dropout_percentage(mesh, dropout)
+        points_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
     else:
-        points_dropout, values_dropout = cell_centered_random_dropout_exact(mesh, dropout)
+        points_dropout, values_dropout = random_dropout_exact(mesh, dropout)
 
     # Save the scaled and translated mesh as input.ply
     storeRawPly(
@@ -624,9 +642,9 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
         values_dropout = mesh.point_data_to_cell_data()["value"]
         points_dropout = mesh.cell_centers().points
     elif 0.0 <= dropout <= 1.0:
-        points_dropout, values_dropout = cell_centered_random_dropout_percentage(mesh, dropout)
+        points_dropout, values_dropout = random_dropout_percentage(mesh, dropout)
     else:
-        points_dropout, values_dropout = cell_centered_random_dropout_exact(mesh, dropout)
+        points_dropout, values_dropout = random_dropout_exact(mesh, dropout)
 
     # Save the scaled and translated mesh as input.ply
     storePly(
@@ -689,6 +707,7 @@ def readRawSceneInfo(
     min_y, max_y = mesh.points[:, 1].min(), mesh.points[:, 1].max()
     min_z, max_z = mesh.points[:, 2].min(), mesh.points[:, 2].max()
     bounding_box = [(min_x, max_x), (min_y, max_y), (min_z, max_z)]
+    print(f"Bounding box: {bounding_box}")
 
     if train_values:
         del mesh
@@ -737,6 +756,7 @@ def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolutio
     min_y, max_y = mesh.points[:, 1].min(), mesh.points[:, 1].max()
     min_z, max_z = mesh.points[:, 2].min(), mesh.points[:, 2].max()
     bounding_box = [(min_x, max_x), (min_y, max_y), (min_z, max_z)]
+    print(f"Bounding box: {bounding_box}")
 
     if train_values:
         del mesh
