@@ -299,6 +299,7 @@ def benchmark(args, datasets):
             "render.py",
             "--model_path",
             model_path,
+            "--skip_train",
             "--colormaps",
             ",".join(config["rendering_colormaps"]),
             "--opacity_steps",
@@ -333,11 +334,10 @@ def benchmark(args, datasets):
                     match = re.search(r'Mesh memory:\s*(\d+)\s*bytes', line)
                     if match:
                         dataset_size = int(match.group(1))
-                if "Total training time" in line:
-                    match = re.search(r'Total training time:\s*(\d+)\s*seconds', line)
+                if "Total training time:" in line:
+                    match = re.search(r'Total training time:\s*([\d.]+)\s*seconds', line)
                     if match:
-                        train_duration = int(match.group(1))
-
+                        train_duration = float(match.group(1))
         ply_file = get_latest_iteration_ply(model_path)
         ply_size = get_file_size(ply_file) if ply_file else None
 
