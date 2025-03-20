@@ -325,6 +325,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.origin = offset
+    print(f"Mesh memory: {mesh.actual_memory_size * 1024} bytes")  
 
     cam_infos = []
     image_counter = 0
@@ -515,6 +516,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
+    print(f"Mesh memory: {mesh.actual_memory_size * 1024} bytes")  
 
     edges = mesh.extract_all_edges()
     edge_lengths = edges.compute_cell_sizes()["Length"]

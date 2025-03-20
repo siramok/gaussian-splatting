@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 # Default configuration parameters
 DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis"]
-DEFAULT_OPACITY_STEPS = [1, 3, 5, 7]
+DEFAULT_OPACITY_STEPS = [5]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
 TESTING_COLORMAPS = ["viridis"]
@@ -325,9 +325,19 @@ def benchmark(args, datasets):
         metrics_duration = time.time() - start_time
 
         # Calculate compression info if available
-        original_file = get_original_dataset_filepath(config["dataset"])
-        dataset_size = get_file_size(original_file) if original_file else None
-        dataset_size = resample_file_to_f32(original_file, dataset_size)
+        dataset_size = None
+        with open(train_log, 'r') as f:
+            for line in f:
+                if "Mesh memory:" in line:
+                    # Extract the number before "bytes"
+                    match = re.search(r'Mesh memory:\s*(\d+)\s*bytes', line)
+                    if match:
+                        dataset_size = int(match.group(1))
+                if "Total training time" in line:
+                    match = re.search(r'Total training time:\s*(\d+)\s*seconds', line)
+                    if match:
+                        train_duration = int(match.group(1))
+
         ply_file = get_latest_iteration_ply(model_path)
         ply_size = get_file_size(ply_file) if ply_file else None
 
