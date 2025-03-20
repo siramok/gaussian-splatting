@@ -62,6 +62,7 @@ class ModelParams(ParamGroup):
         self.data_device = "cuda"
         self.eval = False
         self.colormaps = "viridis"
+        self.opacitymap_options = ""
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

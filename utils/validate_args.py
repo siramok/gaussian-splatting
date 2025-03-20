@@ -15,6 +15,15 @@ def validate_colormaps(colormaps):
 
     return validated_maps
 
+def validate_opacitymaps(opacitymaps):
+    validated_maps = []
+    for cmap in opacitymaps.split(","):
+        if cmap not in ["linear", "inv_linear", "constant0.01", "constant0.1", "random"]:
+            raise ValueError(f"Invalid opacitymap: {cmap}")
+        validated_maps.append(cmap)
+
+    return validated_maps
+
 
 def validate_resolution(value):
     presets = {

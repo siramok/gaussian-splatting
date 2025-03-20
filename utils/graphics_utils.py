@@ -112,79 +112,82 @@ def create_colormaps(names, num_points=256):
 
 
 def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True, wrap_around=False, slope=1):
-    # option_to_func = {
-    #     "inv_linear": np.linspace(1.0, 0.0, num_points),
-    #     "linear": np.linspace(0.0, 1.0, num_points),
-    #     "constant": np.ones(num_points) * 0.01
-    # }
+    option_to_func = {
+        "inv_linear": np.linspace(1.0, 0.0, num_points),
+        "linear": np.linspace(0.0, 1.0, num_points),
+        "constant0.1": np.ones(num_points) * 0.1,
+        "constant0.01": np.ones(num_points) * 0.01,
+        "random": np.random.random(num_points)
+    }
     opacs = []
     opac_derivatives = []
-    # for option in options:
-    #     try:
-    #         opac = option_to_func[option]
-    #         opac_table = torch.tensor(opac, dtype=torch.float32).to("cuda")
+    for option in options:
+        try:
+            opac = option_to_func[option]
+            opac_table = torch.tensor(opac, dtype=torch.float32).to("cuda")
 
-    #         # Precompute derivatives
-    #         derivatives = np.zeros_like(opac, dtype=np.float32)
-    #         for i in range(num_points - 1):
-    #             derivatives[i] = (opac[i + 1] - opac[i]) * (num_points - 1)
+            # Precompute derivatives
+            derivatives = np.zeros_like(opac, dtype=np.float32)
+            for i in range(num_points - 1):
+                derivatives[i] = (opac[i + 1] - opac[i]) * (num_points - 1)
 
-    #         # Convert derivatives to float32 and GPU tensor
-    #         opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+            # Convert derivatives to float32 and GPU tensor
+            opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
 
-    #         opacs.append(opac_table)
-    #         opac_derivatives.append(opac_derivative)
+            opacs.append(opac_table)
+            opac_derivatives.append(opac_derivative)
 
-    #     except Exception as e:
-    #         print(f"Error in create_opacitymaps: {e}")
-    #         raise
+        except Exception as e:
+            print(f"Error in create_opacitymaps: {e}")
+            raise
     try:
-        if not triangular:
-            indices = np.arange(num_points)
-            bins = np.linspace(0, num_points, num_steps+1).astype(int)
-            
-            for arr in [((indices >= start - 1) & (indices < end + 1)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
-                # arr = arr * 0.5
-                opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
-
-                # Precompute derivatives
-                derivatives = np.zeros_like(arr, dtype=np.float32)
-                for i in range(num_points - 1):
-                    derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
-
-                # Convert derivatives to float32 and GPU tensor
-                opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-
-                opacs.append(opac_table)
-                opac_derivatives.append(opac_derivative)
-        else: 
-            indices = np.linspace(0, 1, num_points)
-            step_size = 1.0 / num_steps
-            
-            for step in range(num_steps):
-                center = step * step_size + step_size / 2
-                arr = np.zeros(num_points, dtype=np.float32)
+        if num_steps > 0:
+            if not triangular:
+                indices = np.arange(num_points)
+                bins = np.linspace(0, num_points, num_steps+1).astype(int)
                 
-                for i, x in enumerate(indices):
-                    # Calculate shortest distance considering wrap-around
-                    if wrap_around:
-                        dist = min(abs(x - center), abs(x - (center - 1)), abs(x - (center + 1)))
-                    else:
-                        dist = abs(x - center)
-                    # Make opacity 1 at center and 0 at furthest point from center
-                    arr[i] = max(0, 1 - (dist * 2 * slope * (num_steps / 2)))
+                for arr in [((indices >= start - 1) & (indices < end + 1)).astype(np.float32) for start, end in zip(bins[:-1], bins[1:])]:
+                    # arr = arr * 0.5
+                    opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
+
+                    # Precompute derivatives
+                    derivatives = np.zeros_like(arr, dtype=np.float32)
+                    for i in range(num_points - 1):
+                        derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
+
+                    # Convert derivatives to float32 and GPU tensor
+                    opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+
+                    opacs.append(opac_table)
+                    opac_derivatives.append(opac_derivative)
+            else: 
+                indices = np.linspace(0, 1, num_points)
+                step_size = 1.0 / num_steps
                 
-                opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
-                
-                # Compute derivatives
-                derivatives = np.zeros_like(arr, dtype=np.float32)
-                for i in range(num_points - 1):
-                    derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
+                for step in range(num_steps):
+                    center = step * step_size + step_size / 2
+                    arr = np.zeros(num_points, dtype=np.float32)
                     
-                opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-                
-                opacs.append(opac_table)
-                opac_derivatives.append(opac_derivative)
+                    for i, x in enumerate(indices):
+                        # Calculate shortest distance considering wrap-around
+                        if wrap_around:
+                            dist = min(abs(x - center), abs(x - (center - 1)), abs(x - (center + 1)))
+                        else:
+                            dist = abs(x - center)
+                        # Make opacity 1 at center and 0 at furthest point from center
+                        arr[i] = max(0, 1 - (dist * 2 * slope * (num_steps / 2)))
+                    
+                    opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
+                    
+                    # Compute derivatives
+                    derivatives = np.zeros_like(arr, dtype=np.float32)
+                    for i in range(num_points - 1):
+                        derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
+                        
+                    opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+                    
+                    opacs.append(opac_table)
+                    opac_derivatives.append(opac_derivative)
             
         # Create figure
         plt.figure(figsize=(12, 8))
@@ -216,16 +219,5 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
     except Exception as e:
         print(f"Error in create_opacitymaps: {e}")
         raise
-    
-
-    # opac = np.zeros(num_points)
-    # opac[-1] = 1
-    # opac_table = torch.tensor(opac, dtype=torch.float32).to("cuda")
-    # derivatives = np.zeros_like(opac, dtype=np.float32)
-    # for i in range(num_points - 1):
-    #     derivatives[i] = (opac[i + 1] - opac[i]) * (num_points - 1)
-    # opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
-    # opacs.append(opac_table)
-    # opac_derivatives.append(opac_derivative)
 
     return opacs, opac_derivatives

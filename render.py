@@ -24,7 +24,7 @@ from gaussian_renderer import GaussianModel, render
 from scene import Scene
 from utils.general_utils import safe_state
 from utils.graphics_utils import create_colormaps, create_opacitymaps
-from utils.validate_args import validate_colormaps, validate_resolution, validate_spacing, validate_dropout
+from utils.validate_args import validate_colormaps, validate_opacitymaps, validate_resolution, validate_spacing, validate_dropout
 
 
 def render_set(
@@ -57,7 +57,7 @@ def render_sets(
     skip_test: bool,
 ):
     with torch.no_grad():
-        opacity_tables, opac_derivatives = create_opacitymaps()
+        opacity_tables, opac_derivatives = create_opacitymaps(options=dataset.opacitymap_options, num_steps=dataset.opacity_steps)
         gaussians = GaussianModel()
         scene = Scene(dataset, gaussians, opacity_tables, load_iteration=iteration, shuffle=False)
 
@@ -136,12 +136,14 @@ if __name__ == "__main__":
         dataset.colormaps = args.colormaps
     else:
         dataset.colormaps = validate_colormaps(dataset.colormaps)
+    dataset.opacitymap_options = validate_opacitymaps(dataset.opacitymap_options)
 
     print(f"Colormaps: {dataset.colormaps}")
     dataset.num_control_points = args.num_control_points
     dataset.resolution = args.resolution
     dataset.spacing = args.spacing
     dataset.dropout = args.dropout
+    dataset.opacity_steps = args.opacity_steps
     render_sets(
         dataset,
         args.iteration,

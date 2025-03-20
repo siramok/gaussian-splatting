@@ -32,6 +32,7 @@ from utils.image_utils import psnr
 from utils.loss_utils import bounding_box_regularization, create_window, l1_loss
 from utils.validate_args import (
     validate_colormaps,
+    validate_opacitymaps,
     validate_dropout,
     validate_resolution,
     validate_spacing,
@@ -63,6 +64,7 @@ def training(
         dataset.colormaps, dataset.num_control_points
     )
     opacity_tables, opac_derivatives = create_opacitymaps(
+        options=dataset.opacitymap_options,
         num_steps=dataset.opacity_steps
     )
     tb_writer = prepare_output_and_logger(dataset)
@@ -529,6 +531,7 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     dataset_args = lp.extract(args)
     dataset_args.colormaps = validate_colormaps(dataset_args.colormaps)
+    dataset_args.opacitymap_options = validate_opacitymaps(dataset_args.opacitymap_options)
     dataset_args.num_control_points = args.num_control_points
     dataset_args.resolution = args.resolution
     dataset_args.spacing = args.spacing

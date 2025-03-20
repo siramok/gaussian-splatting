@@ -16,6 +16,7 @@ DEFAULT_OPACITY_STEPS = [1, 3, 5, 7, 9]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
 TESTING_COLORMAPS = ["magma", "coolwarm", "twilight"]
+TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear", "constant0.01", "constant0.1"]
 
 
 def run_command(cmd, log_path):
@@ -265,6 +266,7 @@ def benchmark(args, datasets):
             "train.py",
             "-s",
             config["dataset"],
+            "--eval",
             "--colormaps",
             ",".join(config["training_colormaps"]),
             "--model_path",
@@ -294,6 +296,8 @@ def benchmark(args, datasets):
             model_path,
             "--colormaps",
             ",".join(config["rendering_colormaps"]),
+            "--opacitymap_options",
+            ",".join(TESTING_OPACITYMAP_OPTIONS)
         ]
         render_log = os.path.join(model_path, "render.log")
         print("Rendering started...")
