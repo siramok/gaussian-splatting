@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Default configuration parameters
-DEFAULT_COLORMAPS = ["rainbow", "viridis", "plasma", "RdBu", "cividis", "turbo"]
-DEFAULT_OPACITY_STEPS = [5]
+DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis", "turbo"]
+DEFAULT_OPACITY_STEPS = [1, 3, 5, 7, 9]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
-TESTING_COLORMAPS = ["magma", "coolwarm", "twilight", "tab10", "inferno"]
+TESTING_COLORMAPS = ["magma", "coolwarm", "twilight"]
 
 
 def run_command(cmd, log_path):
@@ -56,6 +56,18 @@ def get_latest_iteration_ply(model_path):
 
 def get_file_size(filepath):
     return os.path.getsize(filepath) if os.path.exists(filepath) else None
+
+
+def resample_file_to_f32(filepath, dataset_size):
+    pattern = r'(float|uint|int)(\d+)'
+    match = re.search(pattern, filepath)
+    
+    if match:
+        type_prefix = match.group(1)  # 'float', 'uint', or 'int'
+        bit_depth = int(match.group(2))  # 16, 8, 32, etc.
+        return (32 / bit_depth) * dataset_size
+    else:
+        return None
 
 
 def write_summary(summary_entry, test_type):
@@ -304,11 +316,12 @@ def benchmark(args, datasets):
         # Calculate compression info if available
         original_file = get_original_dataset_filepath(config["dataset"])
         dataset_size = get_file_size(original_file) if original_file else None
+        dataset_size = resample_file_to_f32(original_file, dataset_size)
         ply_file = get_latest_iteration_ply(model_path)
         ply_size = get_file_size(ply_file) if ply_file else None
 
         if dataset_size and ply_size:
-            compression_ratio = (1 - (ply_size / dataset_size)) * 100
+            compression_ratio = dataset_size / ply_size
             compression_info = (
                 f"Original Size: {dataset_size} bytes\n"
                 f"Compressed Size: {ply_size} bytes\n"
