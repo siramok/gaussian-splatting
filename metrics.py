@@ -44,7 +44,7 @@ def evaluate(model_paths):
             full_dict[scene_dir] = {}
             per_view_dict[scene_dir] = {}
 
-            test_dir = Path(scene_dir) / "train"
+            test_dir = Path(scene_dir) / "test"
 
             for method in os.listdir(test_dir):
                 print("Method:", method)
