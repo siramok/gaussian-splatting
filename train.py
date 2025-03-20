@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import uuid
+import time
 from argparse import ArgumentParser, Namespace
 from random import randint
 
@@ -90,6 +91,7 @@ def training(
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
+    start = time.time()
     for iteration in range(first_iter, opt.iterations + 1):
         if network_gui.conn is None:
             network_gui.try_connect()
@@ -291,6 +293,9 @@ def training(
                     (gaussians.capture(), iteration),
                     os.path.join(scene.model_path, "/chkpnt{iteration}.pth"),
                 )
+    end = time.time()
+    print(f"Total training time: {(end - start):.2f} seconds")
+    print(f"Final number of Gaussians: {gaussians.get_values.shape[0]}")
 
 
 def prepare_output_and_logger(args):
