@@ -88,6 +88,8 @@ def training(
         opt.depth_l1_weight_init, opt.depth_l1_weight_final, max_steps=opt.iterations
     )
 
+    viewpoint_stack = scene.getTrainCameras().copy()
+    viewpoint_indices = list(range(len(viewpoint_stack)))
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
 
@@ -135,8 +137,9 @@ def training(
         gaussians.update_learning_rate(iteration)
 
         # Pick a random Camera
-        viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_indices = list(range(len(viewpoint_stack)))
+        if not viewpoint_stack:
+            viewpoint_stack = scene.getTrainCameras().copy()
+            viewpoint_indices = list(range(len(viewpoint_stack)))
         rand_idx = randint(0, len(viewpoint_indices) - 1)
         viewpoint_cam = viewpoint_stack.pop(rand_idx)
         viewpoint_indices.pop(rand_idx)
