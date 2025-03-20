@@ -8,7 +8,6 @@ import argparse
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Default configuration parameters
 DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis", "turbo"]
@@ -296,6 +295,8 @@ def benchmark(args, datasets):
             model_path,
             "--colormaps",
             ",".join(config["rendering_colormaps"]),
+            "--opacity_steps",
+            str(DEFAULT_OPACITY_STEPS[-1]),
             "--opacitymap_options",
             ",".join(TESTING_OPACITYMAP_OPTIONS)
         ]
