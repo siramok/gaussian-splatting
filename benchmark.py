@@ -1,4 +1,5 @@
 import os
+import shutil
 import re
 import subprocess
 import time
@@ -10,11 +11,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Default configuration parameters
-DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis", "turbo"]
-DEFAULT_OPACITY_STEPS = [1, 3, 5, 7, 9]
+DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis"]
+DEFAULT_OPACITY_STEPS = [1, 3, 5, 7]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
-TESTING_COLORMAPS = ["magma", "coolwarm", "twilight"]
+TESTING_COLORMAPS = ["viridis"]
 TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear", "constant0.01", "constant0.1"]
 
 
@@ -70,8 +71,8 @@ def resample_file_to_f32(filepath, dataset_size):
         return None
 
 
-def write_summary(summary_entry, test_type):
-    summary_path = os.path.join("output", test_type, "summary.txt")
+def write_summary(summary_entry, test_type, datetime_string):
+    summary_path = os.path.join("output", datetime_string, test_type, "summary.txt")
     with open(summary_path, "a") as f:
         f.write(summary_entry + "\n" + ("-" * 40) + "\n")
 
@@ -222,9 +223,14 @@ def benchmark(args, datasets):
         return
 
     sys_info = get_system_info()
+    now = datetime.now()
+    datetime_string = now.strftime("%Y-%m-%d_%H-%M-%S")
+
     for test_type in test_types:
-        test_type_dir = os.path.join("output", test_type)
-        os.makedirs(test_type_dir, exist_ok=True)
+        test_type_dir = os.path.join("output", datetime_string, test_type)
+        if os.path.exists(test_type_dir):
+            shutil.rmtree(test_type_dir)
+        os.makedirs(test_type_dir)
         with open(os.path.join(test_type_dir, "system_info.txt"), "w") as f:
             f.write(sys_info)
 
@@ -252,7 +258,7 @@ def benchmark(args, datasets):
 
         main_folder = "_".join(folder_parts)
         test_type = config.get("test_type", "unknown")
-        model_path = os.path.join("output", test_type, main_folder)
+        model_path = os.path.join("output", datetime_string, test_type, main_folder)
         os.makedirs(model_path, exist_ok=True)
 
         print("\n" + "=" * 40)
@@ -330,7 +336,7 @@ def benchmark(args, datasets):
             compression_info = (
                 f"Original Size: {dataset_size} bytes\n"
                 f"Compressed Size: {ply_size} bytes\n"
-                f"Compression Ratio: {compression_ratio:.2f}%\n"
+                f"Compression Ratio: {compression_ratio:.2f}\n"
             )
         else:
             compression_info = "Compression info not available.\n"
@@ -362,7 +368,7 @@ def benchmark(args, datasets):
             summary_entry += f"Min Gaussian size: {config['min_size']}\n"
         summary_entry += timing_info
 
-        write_summary(summary_entry, test_type)
+        write_summary(summary_entry, test_type, datetime_string)
         print(f"Completed benchmark {idx}/{total_tests} for {test_type}/{main_folder}")
 
 
