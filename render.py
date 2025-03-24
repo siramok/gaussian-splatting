@@ -59,7 +59,7 @@ def render_sets(
     with torch.no_grad():
         opacity_tables, opac_derivatives = create_opacitymaps(options=dataset.opacitymap_options, num_steps=dataset.opacity_steps)
         gaussians = GaussianModel()
-        scene = Scene(dataset, gaussians, opacity_tables, load_iteration=iteration, shuffle=False)
+        scene = Scene(dataset, gaussians, opacity_tables, load_iteration=iteration, shuffle=False, skip_train=skip_train)
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")

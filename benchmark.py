@@ -12,10 +12,10 @@ import matplotlib.pyplot as plt
 
 # Default configuration parameters
 DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis"]
-DEFAULT_OPACITY_STEPS = [5]
+DEFAULT_OPACITY_STEPS = [1, 2, 3, 4, 5, 6, 7]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
-TESTING_COLORMAPS = ["viridis"]
+TESTING_COLORMAPS = ["rainbow"]
 TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear", "constant0.01", "constant0.1"]
 
 
@@ -300,6 +300,7 @@ def benchmark(args, datasets):
             "--model_path",
             model_path,
             "--skip_train",
+            "--eval",
             "--colormaps",
             ",".join(config["rendering_colormaps"]),
             "--opacity_steps",

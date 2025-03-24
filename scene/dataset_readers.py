@@ -143,7 +143,7 @@ def random_dropout_exact(mesh, num_particles_to_keep):
     num_points = mesh.n_points
 
     if num_particles_to_keep > num_points:
-        raise ValueError("num_particles_to_keep cannot exceed total number of points.")
+        num_particles_to_keep = num_points
 
     # Randomly select indices without replacement
     selected_indices = np.random.choice(num_points, size=num_particles_to_keep, replace=False)
@@ -261,7 +261,7 @@ def is_image_too_dark(image, threshold=0.01, dark_ratio=0.999):
     return (dark_pixels / total_pixels) > dark_ratio
 
 
-def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout):
+def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout, skip_train):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -364,9 +364,14 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
             azimuth_range = range(0, 360, 360 // azimuth_steps)
             # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
             elevation_range = range(-35, 35, 70 // elevation_steps)
+            cam_count = 0
 
             for elevation in elevation_range:
                 for azimuth in azimuth_range:
+                    if skip_train and cam_count % 8 != 0:
+                        cam_count += 1
+                        continue
+                    cam_count += 1
                     # Set new azimuth and elevation
                     camera.elevation = elevation
                     camera.azimuth = azimuth
@@ -473,7 +478,7 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     return cam_infos, mesh
 
 
-def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout):
+def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout, skip_train):
     # Directory setup
     image_dir = os.path.join(path, "images")
     if os.path.exists(image_dir):
@@ -562,9 +567,14 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
             azimuth_range = range(0, 360, 360 // azimuth_steps)
             # elevation is intentionally limited to avoid a render bug(s) that occurs when elevation is outside of [-35, 35]
             elevation_range = range(-35, 35, 70 // elevation_steps)
+            cam_count = 0
 
             for elevation in elevation_range:
                 for azimuth in azimuth_range:
+                    if skip_train and cam_count % 8 != 0:
+                        cam_count += 1
+                        continue
+                    cam_count += 1
                     # Set new azimuth and elevation
                     camera.elevation = elevation
                     camera.azimuth = azimuth
@@ -682,23 +692,30 @@ def getDirectppNorm(cam_info):
 
 
 def readRawSceneInfo(
-    path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, eval, train_values, dropout, llffhold=8
+    path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, eval, train_values, dropout, skip_train=False, llffhold=8
 ):
     cam_infos, mesh = buildRawDataset(
-        path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout
+        path, filename, colormaps, opacitymaps, num_control_points, resolution, spacing, dropout, skip_train
     )
 
-    if eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-        # TODO: verify that this actually sets is_test to True
+    if skip_train:
+        train_cam_infos = []
         test_cam_infos = [
-            c._replace(is_test=True)
-            for idx, c in enumerate(cam_infos)
-            if idx % llffhold == 0
-        ]
+                c._replace(is_test=True)
+                for c in cam_infos
+            ]
     else:
-        train_cam_infos = cam_infos
-        test_cam_infos = []
+        if eval:
+            train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+            # TODO: verify that this actually sets is_test to True
+            test_cam_infos = [
+                c._replace(is_test=True)
+                for idx, c in enumerate(cam_infos)
+                if idx % llffhold == 0
+            ]
+        else:
+            train_cam_infos = cam_infos
+            test_cam_infos = []
 
     normalization = getDirectppNorm(train_cam_infos)
 
@@ -734,20 +751,27 @@ def readRawSceneInfo(
     return scene_info
 
 
-def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolution, eval, train_values, dropout, llffhold=8):
-    cam_infos, mesh = buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout)
+def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolution, eval, train_values, dropout, skip_train=False, llffhold=8):
+    cam_infos, mesh = buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution, dropout, skip_train)
 
-    if eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-        # TODO: verify that this actually sets is_test to True
+    if skip_train:
+        train_cam_infos = []
         test_cam_infos = [
             c._replace(is_test=True)
-            for idx, c in enumerate(cam_infos)
-            if idx % llffhold == 0
+            for c in cam_infos
         ]
     else:
-        train_cam_infos = cam_infos
-        test_cam_infos = []
+        if eval:
+            train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+            # TODO: verify that this actually sets is_test to True
+            test_cam_infos = [
+                c._replace(is_test=True)
+                for idx, c in enumerate(cam_infos)
+                if idx % llffhold == 0
+            ]
+        else:
+            train_cam_infos = cam_infos
+            test_cam_infos = []
 
     normalization = getDirectppNorm(train_cam_infos)
 

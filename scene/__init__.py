@@ -32,6 +32,7 @@ class Scene:
         shuffle=True,
         resolution_scales=[1.0],
         train_values = True,
+        skip_train=False
     ):
         self.model_path = args.model_path
         self.loaded_iter = None
@@ -62,7 +63,8 @@ class Scene:
                 args.resolution,
                 args.eval,
                 train_values,
-                args.dropout
+                args.dropout,
+                skip_train
             )
         elif len(raw_files) == 1:
             scene_info = readRawSceneInfo(
@@ -75,7 +77,8 @@ class Scene:
                 args.spacing,
                 args.eval,
                 train_values,
-                args.dropout
+                args.dropout,
+                skip_train
             )
         else:
             raise FileNotFoundError(
