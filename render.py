@@ -10,6 +10,7 @@
 #
 
 import os
+import shutil
 from argparse import ArgumentParser
 from itertools import islice
 from os import makedirs
@@ -33,6 +34,8 @@ def render_set(
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
+    shutil.rmtree(render_path)
+    shutil.rmtree(gts_path)
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
@@ -57,7 +60,7 @@ def render_sets(
     skip_test: bool,
 ):
     with torch.no_grad():
-        opacity_tables, opac_derivatives = create_opacitymaps(options=dataset.opacitymap_options, num_steps=dataset.opacity_steps)
+        opacity_tables, opac_derivatives = create_opacitymaps(options=dataset.opacitymap_options, num_steps=dataset.opacity_steps, num_random=dataset.opacitymap_randoms)
         gaussians = GaussianModel()
         scene = Scene(dataset, gaussians, opacity_tables, load_iteration=iteration, shuffle=False, skip_train=skip_train)
 
@@ -120,6 +123,11 @@ if __name__ == "__main__":
         default=5,
     )
     parser.add_argument(
+        "--opacitymap_randoms",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
         "--dropout",
         type=validate_dropout,
         default=0.01
@@ -144,6 +152,7 @@ if __name__ == "__main__":
     dataset.spacing = args.spacing
     dataset.dropout = args.dropout
     dataset.opacity_steps = args.opacity_steps
+    dataset.opacitymap_randoms = args.opacitymap_randoms
     render_sets(
         dataset,
         args.iteration,
