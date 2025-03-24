@@ -445,7 +445,8 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
 
     print(f"Number of images generated: {image_counter}")
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
-    
+    if skip_train:
+        dropout = 300000
     if dropout is None:
         values_dropout = mesh.point_data_to_cell_data()["value"]
         points_dropout = mesh.cell_centers().points
@@ -649,7 +650,8 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
 
     print(f"Number of images generated: {image_counter}")
     print(f"Number of images thrown away due to darkness: {throwaway_counter}")
-    
+    if skip_train:
+        dropout = 300000
     if dropout is None:
         values_dropout = mesh.point_data_to_cell_data()["value"]
         points_dropout = mesh.cell_centers().points
@@ -717,10 +719,15 @@ def readRawSceneInfo(
             train_cam_infos = cam_infos
             test_cam_infos = []
 
-    normalization = getDirectppNorm(train_cam_infos)
+    if skip_train:
+        normalization = getDirectppNorm(test_cam_infos)
+    else:
+        normalization = getDirectppNorm(train_cam_infos)
 
+    print("here")
     ply_path = os.path.join(path, "input.ply")
     pcd = fetchPly(ply_path)
+    print("next")
 
     min_x, max_x = mesh.points[:, 0].min(), mesh.points[:, 0].max()
     min_y, max_y = mesh.points[:, 1].min(), mesh.points[:, 1].max()
@@ -773,7 +780,10 @@ def readVtuSceneInfo(path, colormaps, opacitymaps, num_control_points, resolutio
             train_cam_infos = cam_infos
             test_cam_infos = []
 
-    normalization = getDirectppNorm(train_cam_infos)
+    if skip_train:
+        normalization = getDirectppNorm(test_cam_infos)
+    else:
+        normalization = getDirectppNorm(train_cam_infos)
 
     ply_path = os.path.join(path, "input.ply")
     pcd = fetchPly(ply_path)
