@@ -111,7 +111,7 @@ def create_colormaps(names, num_points=256):
     return all_colors, all_derivatives
 
 
-def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True, wrap_around=False, slope=1):
+def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True, wrap_around=False, slope=1, num_random=0):
     option_to_func = {
         "inv_linear": np.linspace(1.0, 0.0, num_points),
         "linear": np.linspace(0.0, 1.0, num_points),
@@ -119,6 +119,7 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
         "constant0.01": np.ones(num_points) * 0.01,
         "random": np.random.random(num_points)
     }
+    options.extend(["random" for i in range(num_random)])
     opacs = []
     opac_derivatives = []
     for option in options:
