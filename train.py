@@ -466,7 +466,7 @@ if __name__ == "__main__":
         "--test_iterations",
         nargs="+",
         type=int,
-        default=list(range(1000, 40001, 1000)),
+        default=list(range(1000, 30001, 1000)),
     )
     parser.add_argument(
         "--save_iterations",
@@ -477,7 +477,6 @@ if __name__ == "__main__":
             10_000,
             20_000,
             30_000,
-            40_000,
         ],
     )
     parser.add_argument(

@@ -9,14 +9,15 @@ import argparse
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
+from itertools import combinations
 
 # Default configuration parameters
 DEFAULT_COLORMAPS = ["rainbow"]
-DEFAULT_OPACITY_STEPS = [1, 2, 3, 4, 5, 6]
+DEFAULT_OPACITY_STEPS = [5]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
 TESTING_COLORMAPS = ["rainbow"]
-RENDERING_OPACITYMAP_OPTIONS = ["constant0.01", "constant0.1"]
+RENDERING_OPACITYMAP_OPTIONS = ["constant0.1"]
 TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear"]
 
 def run_command(cmd, log_path):
@@ -114,6 +115,21 @@ def get_original_dataset_filepath(dataset_path):
     return None
 
 
+def all_combinations(items):
+    # Generate all combinations of all possible lengths (0 to len(items))
+    all_combos = []
+    
+    # Add the empty combination first
+    all_combos.append([])
+    
+    # Generate combinations of each length from 1 to len(items)
+    for r in range(1, len(items) + 1):
+        for combo in combinations(items, r):
+            all_combos.append(list(combo))
+    
+    return all_combos
+
+
 def generate_test_configs(args, datasets):
     """
     Generate a list of test configurations based on command-line arguments and provided datasets.
@@ -150,6 +166,7 @@ def generate_test_configs(args, datasets):
                     "training_colormaps": ["rainbow"],
                     "rendering_colormaps": TESTING_COLORMAPS,
                     "opacity_steps": step,
+                    "opacitymap_options": RENDERING_OPACITYMAP_OPTIONS,
                     "test_type": "opacity_steps",
                 }
                 configs.append(config)
@@ -250,7 +267,7 @@ def benchmark(args, datasets):
         folder_parts = [dataset_name, "_".join(config["training_colormaps"])]
 
         if "opacity_steps" in config:
-            folder_parts.append(f"opacity{config['opacity_steps']}")
+            folder_parts.append(f"opacity{config['opacity_steps']}opt{','.join(config['opacitymap_options'])}")
         if "max_opacity" in config:
             folder_parts.append(f"maxOpac{config['max_opacity']}")
         if "min_size" in config:
@@ -279,7 +296,7 @@ def benchmark(args, datasets):
             "--opacity_steps",
             str(config.get("opacity_steps", 5)),
             "--opacitymap_options",
-            ",".join(RENDERING_OPACITYMAP_OPTIONS),
+            ",".join(config["opacitymap_options"]),
             "--max_opac_grad",
             str(config.get("max_opacity", 1.5)),
             "--min_gaussian_size",
