@@ -34,8 +34,10 @@ def render_set(
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
-    shutil.rmtree(render_path)
-    shutil.rmtree(gts_path)
+    if os.path.exists(render_path):
+        shutil.rmtree(render_path)
+    if os.path.exists(gts_path):  
+        shutil.rmtree(gts_path)
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
