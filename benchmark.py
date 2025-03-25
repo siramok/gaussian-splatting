@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Default configuration parameters
-DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis"]
+DEFAULT_COLORMAPS = ["rainbow"]
 DEFAULT_OPACITY_STEPS = [1, 2, 3, 4, 5, 6]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
@@ -308,7 +308,7 @@ def benchmark(args, datasets):
             "--opacity_steps",
             str(0),
             "--opacitymap_options",
-            "none",
+            ",".join(TESTING_OPACITYMAP_OPTIONS),
             "--opacitymap_randoms",
             str(50)
         ]
