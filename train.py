@@ -256,34 +256,34 @@ def training(
                 scene.save(iteration)
 
             # Densification
-            if iteration < opt.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(
-                    gaussians.max_radii2D[visibility_filter], radii[visibility_filter]
+            # Keep track of max radii in image-space for pruning
+            gaussians.max_radii2D[visibility_filter] = torch.max(
+                gaussians.max_radii2D[visibility_filter], radii[visibility_filter]
+            )
+            gaussians.add_densification_stats(
+                viewspace_point_tensor, visibility_filter
+            )
+            if (
+                iteration > opt.densify_from_iter
+                and iteration % opt.densification_interval == 0
+            ):
+                size_threshold = (
+                    20 if iteration > opt.opacity_reset_interval else None
                 )
-                gaussians.add_densification_stats(
-                    viewspace_point_tensor, visibility_filter
+                gaussians.densify_and_prune(
+                    opt.densify_grad_threshold,
+                    0.005,
+                    scene.cameras_extent,
+                    size_threshold,
+                    dataset_args.max_opac_grad,
+                    dataset_args.min_gaussian_size,
+                    iteration < opt.densify_until_iter
                 )
-                if (
-                    iteration > opt.densify_from_iter
-                    and iteration % opt.densification_interval == 0
-                ):
-                    size_threshold = (
-                        20 if iteration > opt.opacity_reset_interval else None
-                    )
-                    gaussians.densify_and_prune(
-                        opt.densify_grad_threshold,
-                        0.005,
-                        scene.cameras_extent,
-                        size_threshold,
-                        dataset_args.max_opac_grad,
-                        dataset_args.min_gaussian_size,
-                    )
 
-                if (
-                    iteration % opt.opacity_reset_interval == 0 and opt.train_opacity
-                ) or (dataset.white_background and iteration == opt.densify_from_iter):
-                    gaussians.reset_opacity()
+            if (
+                iteration % opt.opacity_reset_interval == 0 and opt.train_opacity
+            ) or (dataset.white_background and iteration == opt.densify_from_iter):
+                gaussians.reset_opacity()
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -466,7 +466,7 @@ if __name__ == "__main__":
         "--test_iterations",
         nargs="+",
         type=int,
-        default=list(range(1000, 30001, 1000)),
+        default=list(range(1000, 40001, 1000)),
     )
     parser.add_argument(
         "--save_iterations",
@@ -477,6 +477,7 @@ if __name__ == "__main__":
             10_000,
             20_000,
             30_000,
+            40_000,
         ],
     )
     parser.add_argument(
@@ -517,7 +518,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dropout",
         type=validate_dropout,
-        default=0.99
+        default=300000
     )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)

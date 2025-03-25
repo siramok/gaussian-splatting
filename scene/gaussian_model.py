@@ -627,7 +627,7 @@ class GaussianModel:
         )
 
     def densify_and_prune(
-        self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad, min_size
+        self, max_grad, min_opacity, extent, max_screen_size, max_opac_grad, min_size, densify
     ):
         # opac_grads = self._opacity.grad.clone()
         # opac_grads = torch.cat([opac_grads, torch.zeros((self._opacity.size(0) - opac_grads.size(0), 1), device="cuda")])
@@ -644,13 +644,14 @@ class GaussianModel:
         # print(f"Num pruned: {np.count_nonzero(prune_mask.cpu().detach().numpy())}")
         self.prune_points(prune_mask)
 
-        grads = self.xyz_gradient_accum / self.denom
-        grads[grads.isnan()] = 0.0
+        if densify:
+            grads = self.xyz_gradient_accum / self.denom
+            grads[grads.isnan()] = 0.0
 
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
+            self.densify_and_clone(grads, max_grad, extent)
+            self.densify_and_split(grads, max_grad, extent)
 
-        torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(
