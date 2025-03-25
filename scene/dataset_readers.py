@@ -724,10 +724,8 @@ def readRawSceneInfo(
     else:
         normalization = getDirectppNorm(train_cam_infos)
 
-    print("here")
     ply_path = os.path.join(path, "input.ply")
     pcd = fetchPly(ply_path)
-    print("next")
 
     min_x, max_x = mesh.points[:, 0].min(), mesh.points[:, 0].max()
     min_y, max_y = mesh.points[:, 1].min(), mesh.points[:, 1].max()

@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 
 # Default configuration parameters
 DEFAULT_COLORMAPS = ["rainbow", "RdBu", "cividis"]
-DEFAULT_OPACITY_STEPS = [1, 2, 3, 4, 5, 6, 7]
+DEFAULT_OPACITY_STEPS = [1, 2, 3, 4, 5, 6]
 DEFAULT_MAX_OPACITY = [1.5]
 DEFAULT_MIN_SIZE = [0.0001]
 TESTING_COLORMAPS = ["rainbow"]
-TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear", "constant0.01", "constant0.1"]
-
+RENDERING_OPACITYMAP_OPTIONS = ["constant0.01", "constant0.1"]
+TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear"]
 
 def run_command(cmd, log_path):
     with open(log_path, "w") as log_file:
@@ -278,6 +278,8 @@ def benchmark(args, datasets):
             model_path,
             "--opacity_steps",
             str(config.get("opacity_steps", 5)),
+            "--opacitymap_options",
+            ",".join(RENDERING_OPACITYMAP_OPTIONS),
             "--max_opac_grad",
             str(config.get("max_opacity", 1.5)),
             "--min_gaussian_size",
@@ -304,9 +306,11 @@ def benchmark(args, datasets):
             "--colormaps",
             ",".join(config["rendering_colormaps"]),
             "--opacity_steps",
-            str(DEFAULT_OPACITY_STEPS[-1]),
+            str(0),
             "--opacitymap_options",
-            ",".join(TESTING_OPACITYMAP_OPTIONS)
+            "none",
+            "--opacitymap_randoms",
+            str(50)
         ]
         render_log = os.path.join(model_path, "render.log")
         print("Rendering started...")

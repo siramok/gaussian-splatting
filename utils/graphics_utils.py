@@ -15,6 +15,7 @@ from typing import NamedTuple
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import time
 
 
 class BasicPointCloud(NamedTuple):
@@ -117,9 +118,68 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
         "linear": np.linspace(0.0, 1.0, num_points),
         "constant0.1": np.ones(num_points) * 0.1,
         "constant0.01": np.ones(num_points) * 0.01,
-        "random": np.random.random(num_points)
+        "constant0.01": np.ones(num_points) * 0.005,
     }
-    options.extend(["random" for i in range(num_random)])
+    np.random.seed(int(time.time()))
+    centers = np.random.random(num_random)
+    rand_lengths = np.random.random(num_random)
+    for i in range(num_random):
+        # num_control_points = 16
+        # values = np.zeros(num_points)
+        
+        # control_indices = np.sort(np.random.choice(
+        #     range(num_points), 
+        #     size=num_control_points, 
+        #     replace=False
+        # ))
+        # for j, idx in enumerate(control_indices):
+        #     if j % 2 == 0:
+        #         values[idx] = 0
+        #     else:
+        #         values[idx] = 1
+        # for j in range(num_control_points):
+        #     start_idx = control_indices[j]
+        #     end_idx = control_indices[(j+1) % num_control_points]  # Wrap around
+        #     if end_idx <= start_idx:  # We've wrapped around
+        #         segments = [
+        #             (start_idx, num_points),  # From start_idx to the end
+        #             (-1, end_idx)  # From the beginning to end_idx
+        #         ]
+        #         total_distance = (num_points - start_idx) + end_idx
+        #     else:
+        #         segments = [(start_idx, end_idx)]
+        #         total_distance = end_idx - start_idx
+            
+        #     if total_distance > 1:  # Only interpolate if there are points between
+        #         start_val = values[start_idx]
+        #         end_val = values[end_idx]
+                
+        #         for segment_start, segment_end in segments:
+        #             for k in range(segment_start + 1, segment_end):
+        #                 # Calculate position relative to the full wraparound distance
+        #                 if end_idx <= start_idx and k < end_idx:
+        #                     # We're in the second segment (wrapped around)
+        #                     distance_from_start = (num_points - start_idx) + k
+        #                 else:
+        #                     distance_from_start = k - start_idx
+                        
+        #                 alpha = distance_from_start / total_distance
+        #                 values[k] = start_val * (1 - alpha) + end_val * alpha
+        indices = np.linspace(0, 1, num_points)
+        center = centers[i]
+        rand_length = rand_lengths[i]
+        values = np.zeros(num_points)
+        
+        for j, x in enumerate(indices):
+            # Calculate shortest distance considering wrap-around
+            if wrap_around:
+                dist = min(abs(x - center), abs(x - (center - 1)), abs(x - (center + 1)))
+            else:
+                dist = abs(x - center)
+            # Make opacity 1 at center and 0 at furthest point from center
+            values[j] = max(0, 1 - (dist * 2 * slope) / rand_length)   
+        option_to_func[f"random{i}"] = values
+    options.extend([f"random{i}" for i in range(num_random)])
     opacs = []
     opac_derivatives = []
     for option in options:
