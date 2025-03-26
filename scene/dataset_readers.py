@@ -518,11 +518,15 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     # Point scaling
     points_min = np.min(mesh.points, axis=0)
     points_max = np.max(mesh.points, axis=0)
-    points_max_abs = max(np.max(np.abs(points_min)), np.max(np.abs(points_max)))
+    points_range = points_max - points_min
+    points_max_abs = np.max(points_range)
 
     if points_max_abs > 1:
-        scale_factor = -1.0 / points_max_abs
+        scale_factor = 1.0 / points_max_abs
         mesh.scale(scale_factor, inplace=True)
+
+    new_points_min = np.min(mesh.points, axis=0)
+    mesh.translate([-new_points_min[0], -new_points_min[1], 0], inplace=True)
 
     # Get the focal point so that we can translate the mesh to the origin
     offset = list(pl.camera.focal_point)
@@ -530,6 +534,13 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
     offset[2] -= 3
     offset = [-x for x in offset]
     mesh.translate(offset, inplace=True)
+
+    # # Get the focal point so that we can translate the mesh to the origin
+    # offset = list(pl.camera.focal_point)
+    # # However, the renderer has a bug(s) if the the camera's z-position is too close to 0, this works around it
+    # offset[2] -= 3
+    # offset = [-x for x in offset]
+    # mesh.translate(offset, inplace=True)
     print(f"Mesh memory: {mesh.actual_memory_size * 1024} bytes")  
 
     edges = mesh.extract_all_edges()
