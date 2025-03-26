@@ -118,7 +118,7 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
         "linear": np.linspace(0.0, 1.0, num_points),
         "constant0.1": np.ones(num_points) * 0.1,
         "constant0.01": np.ones(num_points) * 0.01,
-        "constant0.01": np.ones(num_points) * 0.005,
+        "constant0.005": np.ones(num_points) * 0.005,
     }
     np.random.seed(int(time.time()))
     centers = np.random.random(num_random)

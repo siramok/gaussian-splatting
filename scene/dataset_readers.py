@@ -332,10 +332,15 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
     throwaway_counter = 0
 
     for opacitymap_id, opacitymap in enumerate(opacitymaps):
+        # is_constant = np.all(opacitymap == opacitymap.flat[0])
+        # if is_constant:
+        #     smallest_dimension = min(mesh.dimensions)
+        #     opacitymap = np.maximum(0.005, opacitymap * (256 / float(smallest_dimension))**3)
+        #     print(f"Scaled constant opacitymap value to: {opacitymap.flat[0]}")
         for colormap_id, colormap in enumerate(colormaps):
             cmap = plt.cm.get_cmap(colormap, num_control_points)
             pl.clear()
-            pl.add_volume(
+            volume_actor = pl.add_volume(
                 mesh,
                 show_scalar_bar=False,
                 scalars="value",
@@ -346,8 +351,11 @@ def buildRawDataset(path, filename, colormaps, opacitymaps, num_control_points, 
                 diffuse=0.0,
                 specular=0.0,
                 ambient=1.0,
-                opacity_unit_distance=None,
+                opacity_unit_distance=(1.0/128.0),
             )
+            volume_property = volume_actor.GetProperty()
+            opacity_unit_distance = volume_property.GetScalarOpacityUnitDistance(0)
+            print(f"Opacity unit distance: {opacity_unit_distance}")
 
             # Reset the camera position and focal point, since we translated the mesh
             pl.view_xy()
@@ -539,7 +547,7 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
         for colormap_id, colormap in enumerate(colormaps):
             cmap = plt.cm.get_cmap(colormap, num_control_points)
             pl.clear()
-            pl.add_volume(
+            volume_actor = pl.add_volume(
                 mesh,
                 show_scalar_bar=False,
                 scalars=array_name,
@@ -550,8 +558,11 @@ def buildVtuDataset(path, colormaps, opacitymaps, num_control_points, resolution
                 diffuse=0.0,
                 specular=0.0,
                 ambient=1.0,
-                opacity_unit_distance=min_edge_length,
+                opacity_unit_distance=(1.0/128.0),
             )
+            volume_property = volume_actor.GetProperty()
+            opacity_unit_distance = volume_property.GetScalarOpacityUnitDistance(0)
+            print(f"Opacity unit distance: {opacity_unit_distance}")
 
             # Reset the camera position and focal point, since we translated the mesh
             pl.view_xy()
