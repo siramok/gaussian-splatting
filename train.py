@@ -64,12 +64,13 @@ def training(
         dataset.colormaps, dataset.num_control_points
     )
     opacity_tables, opac_derivatives = create_opacitymaps(
-        options=dataset.opacitymap_options,
-        num_steps=dataset.opacity_steps
+        options=dataset.opacitymap_options, num_steps=dataset.opacity_steps
     )
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(opt.train_opacity, opt.train_values)
+    start_time = time.time()
     scene = Scene(dataset, gaussians, opacity_tables, train_values=opt.train_values)
+    print(f"Scene loaded in {time.time() - start_time:.2f} seconds")
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
@@ -260,16 +261,12 @@ def training(
             gaussians.max_radii2D[visibility_filter] = torch.max(
                 gaussians.max_radii2D[visibility_filter], radii[visibility_filter]
             )
-            gaussians.add_densification_stats(
-                viewspace_point_tensor, visibility_filter
-            )
+            gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
             if (
                 iteration > opt.densify_from_iter
                 and iteration % opt.densification_interval == 0
             ):
-                size_threshold = (
-                    20 if iteration > opt.opacity_reset_interval else None
-                )
+                size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                 gaussians.densify_and_prune(
                     opt.densify_grad_threshold,
                     0.005,
@@ -277,12 +274,12 @@ def training(
                     size_threshold,
                     dataset_args.max_opac_grad,
                     dataset_args.min_gaussian_size,
-                    iteration < opt.densify_until_iter
+                    iteration < opt.densify_until_iter,
                 )
 
-            if (
-                iteration % opt.opacity_reset_interval == 0 and opt.train_opacity
-            ) or (dataset.white_background and iteration == opt.densify_from_iter):
+            if (iteration % opt.opacity_reset_interval == 0 and opt.train_opacity) or (
+                dataset.white_background and iteration == opt.densify_from_iter
+            ):
                 gaussians.reset_opacity()
 
             # Optimizer step
@@ -473,7 +470,6 @@ if __name__ == "__main__":
         nargs="+",
         type=int,
         default=[
-            1,
             10_000,
             20_000,
             30_000,
@@ -514,11 +510,7 @@ if __name__ == "__main__":
         type=float,
         default=0.001,
     )
-    parser.add_argument(
-        "--dropout",
-        type=validate_dropout,
-        default=300000
-    )
+    parser.add_argument("--dropout", type=validate_dropout, default=300000)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
 
@@ -534,7 +526,9 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     dataset_args = lp.extract(args)
     dataset_args.colormaps = validate_colormaps(dataset_args.colormaps)
-    dataset_args.opacitymap_options = validate_opacitymaps(dataset_args.opacitymap_options)
+    dataset_args.opacitymap_options = validate_opacitymaps(
+        dataset_args.opacitymap_options
+    )
     dataset_args.num_control_points = args.num_control_points
     dataset_args.resolution = args.resolution
     dataset_args.spacing = args.spacing
