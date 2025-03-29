@@ -469,11 +469,7 @@ if __name__ == "__main__":
         "--save_iterations",
         nargs="+",
         type=int,
-        default=[
-            10_000,
-            20_000,
-            30_000,
-        ],
+        default=[10000, 20000, 30000],
     )
     parser.add_argument(
         "--interpolate_until",
@@ -490,6 +486,7 @@ if __name__ == "__main__":
         type=validate_resolution,
         default="medium",
     )
+    # Default is given as a tuple, but note we override this later if the file exists.
     parser.add_argument(
         "--spacing",
         type=validate_spacing,
@@ -512,6 +509,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dropout", type=validate_dropout, default=300000)
     args = parser.parse_args(sys.argv[1:])
+
     args.save_iterations.append(args.iterations)
 
     print("Optimizing " + args.model_path)
@@ -520,7 +518,6 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     # Start GUI server, configure and run training
-    # TODO: Can we remove this GUI server?
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
@@ -531,7 +528,23 @@ if __name__ == "__main__":
     )
     dataset_args.num_control_points = args.num_control_points
     dataset_args.resolution = args.resolution
-    dataset_args.spacing = args.spacing
+
+    # Read spacing from file if it exists
+    spacing_file = os.path.join(dataset_args.source_path, "spacing.txt")
+    if os.path.exists(spacing_file):
+        try:
+            with open(spacing_file, "r") as f:
+                spacing_str = f.read().strip()
+            validated_spacing = validate_spacing(spacing_str)
+            # Update both args and dataset_args with the new spacing
+            args.spacing = validated_spacing
+            dataset_args.spacing = validated_spacing
+            print("Using spacing from file:", validated_spacing)
+        except Exception as e:
+            dataset_args.spacing = args.spacing
+    else:
+        dataset_args.spacing = args.spacing
+
     dataset_args.opacity_steps = args.opacity_steps
     dataset_args.max_opac_grad = args.max_opac_grad
     dataset_args.min_gaussian_size = args.min_gaussian_size
