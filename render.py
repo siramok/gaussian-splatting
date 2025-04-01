@@ -11,6 +11,7 @@
 
 import os
 import shutil
+import time
 from argparse import ArgumentParser
 from itertools import islice
 from os import makedirs
@@ -40,18 +41,24 @@ def render_set(
         shutil.rmtree(gts_path)
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
+    time_iters = []
 
     for idx, view in islice(enumerate(tqdm(views, desc="Rendering progress")), len(views)):
+        torch.cuda.synchronize()
+        start = time.time()
         rendering = render(
             view, gaussians, pipeline, background, colormap_tables[view.colormap_id], derivatives[view.colormap_id], opacity_tables[view.opacitymap_id], opac_derivatives[view.opacitymap_id], use_trained_exp=train_test_exp
         )["render"]
         gt = view.original_image[0:3, :, :]
+        torch.cuda.synchronize()
+        time_iters.append(time.time() - start)
         torchvision.utils.save_image(
             rendering, os.path.join(render_path, "{0:05d}".format(idx) + ".png")
         )
         torchvision.utils.save_image(
             gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png")
         )
+    print(time_iters)
 
 
 def render_sets(
