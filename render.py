@@ -50,15 +50,15 @@ def render_set(
         rendering = render(
             view, gaussians, pipeline, background, colormap_tables[view.colormap_id], derivatives[view.colormap_id], opacity_tables[view.opacitymap_id], opac_derivatives[view.opacitymap_id], use_trained_exp=train_test_exp
         )["render"]
-        # gt = view.original_image[0:3, :, :]
+        gt = view.original_image[0:3, :, :]
         torch.cuda.synchronize()
         time_iters.append(time.time() - start)
         torchvision.utils.save_image(
             rendering, os.path.join(render_path, "{0:05d}".format(idx) + ".png")
         )
-        # torchvision.utils.save_image(
-        #     gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png")
-        # )
+        torchvision.utils.save_image(
+            gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png")
+        )
     print(f"Mean time to render a frame: {np.mean(time_iters[20:])}")
 
 
