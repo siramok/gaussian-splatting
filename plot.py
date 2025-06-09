@@ -78,7 +78,7 @@ def parse_summary(summary_path):
 
 
 def main():
-    output_dir = "output"
+    output_dir = "output/opacitysteps"
     if not os.path.exists(output_dir):
         print(
             f"Error: Directory '{output_dir}' not found. Make sure you're running this script from the correct location."
@@ -306,7 +306,7 @@ def main():
     # Sort global experiments by PSNR descending
     global_experiments.sort(key=lambda item: item[1]["psnr"], reverse=True)
 
-    top_n = 20
+    top_n = 50
     global_experiments = global_experiments[:top_n]
 
     global_labels = [item[0] for item in global_experiments]
@@ -334,6 +334,8 @@ def main():
 
     # 1. Global SSIM plot
     combined_ssim_file = os.path.join(combined_plots_dir, "combined_ssim.png")
+    print(global_ssim)
+    print(global_labels)
     plt.figure(figsize=(width, height))
     plt.barh(range(num_experiments), global_ssim, color="skyblue")
     plt.title("Global SSIM Across All Test Types")
@@ -347,6 +349,7 @@ def main():
 
     # 2. Global PSNR plot
     combined_psnr_file = os.path.join(combined_plots_dir, "combined_psnr.png")
+    print(global_psnr)
     plt.figure(figsize=(width, height))
     plt.barh(range(num_experiments), global_psnr, color="salmon")
     plt.title("Global PSNR Across All Test Types")
