@@ -12,10 +12,9 @@ import matplotlib.pyplot as plt
 
 # Default configuration parameters
 TESTING_COLORMAPS = ["rainbow"]
-TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear", "constant0.01", "constant0.1"]
+TESTING_OPACITYMAP_OPTIONS = ["none"]
 TESTING_OPACITYSTEPS = 0
-TESTING_OPACITYMAP_RANDOMS = 0
-
+TESTING_OPACITYMAP_RANDOMS = 50
 
 def run_command(cmd, log_path):
     with open(log_path, "w") as log_file:

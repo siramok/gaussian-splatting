@@ -19,6 +19,11 @@ DEFAULT_MIN_SIZE = [0.0001]
 TESTING_COLORMAPS = ["rainbow"]
 RENDERING_OPACITYMAP_OPTIONS = ["constant0.1"]
 TESTING_OPACITYMAP_OPTIONS = ["linear", "inv_linear"]
+SCALING = [0.00001]
+# DROPOUTS = [1-(1.0/256.0), 1-(1.0/1024.0)]
+# DROPOUTS = [1-(1.0/32.0), 1-(1.0/64.0), 1-(1/128.0), 1-(1.0/256.0), 1-(1.0/512.0), 1-(1.0/1024.0), 1-(1.0/2048.0)]
+DROPOUTS = [0.999, 0.9999]
+
 
 def run_command(cmd, log_path):
     with open(log_path, "w") as log_file:
@@ -161,15 +166,20 @@ def generate_test_configs(args, datasets):
     if args.opacity_tests:
         for dataset in datasets:
             for step in DEFAULT_OPACITY_STEPS:
-                config = {
-                    "dataset": dataset,
-                    "training_colormaps": ["rainbow"],
-                    "rendering_colormaps": TESTING_COLORMAPS,
-                    "opacity_steps": step,
-                    "opacitymap_options": RENDERING_OPACITYMAP_OPTIONS,
-                    "test_type": "opacity_steps",
-                }
-                configs.append(config)
+                # for r in RENDERING_OPACITYMAP_OPTIONS:
+                    for s in SCALING:
+                        for d in DROPOUTS:
+                            config = {
+                                "dataset": dataset,
+                                "training_colormaps": ["rainbow"],
+                                "rendering_colormaps": TESTING_COLORMAPS,
+                                "opacity_steps": step,
+                                "opacitymap_options": RENDERING_OPACITYMAP_OPTIONS,
+                                "test_type": "opacity_steps",
+                                "scaling": s,
+                                "dropout": d,
+                            }
+                            configs.append(config)
 
     if args.max_opacity_tests:
         for dataset in datasets:
@@ -267,7 +277,7 @@ def benchmark(args, datasets):
         folder_parts = [dataset_name, "_".join(config["training_colormaps"])]
 
         if "opacity_steps" in config:
-            folder_parts.append(f"opacity{config['opacity_steps']}opt{','.join(config['opacitymap_options'])}")
+            folder_parts.append(f"opacity{config['opacity_steps']}dropout{config['dropout']}")
         if "max_opacity" in config:
             folder_parts.append(f"maxOpac{config['max_opacity']}")
         if "min_size" in config:
@@ -301,6 +311,10 @@ def benchmark(args, datasets):
             str(config.get("max_opacity", 1.5)),
             "--min_gaussian_size",
             str(config.get("min_size", 0.0001)),
+            "--lambda_scaling",
+            str(config.get("scaling", 0.00001)),
+            "--dropout",
+            str(config.get("dropout", 500000))
         ]
         train_log = os.path.join(model_path, "train.log")
         print("Training started...")
@@ -327,7 +341,7 @@ def benchmark(args, datasets):
             "--opacitymap_options",
             ",".join(TESTING_OPACITYMAP_OPTIONS),
             "--opacitymap_randoms",
-            str(50)
+            str(25)
         ]
         render_log = os.path.join(model_path, "render.log")
         print("Rendering started...")
