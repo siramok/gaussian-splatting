@@ -69,14 +69,15 @@ def training(
     ema_Ll1depth_for_log = 0.0
 
     # Make ground truth
-    v = np.linspace(0.01, 0.99, 50)
+    v = np.linspace(0.01, 0.99, 100)
     x, y, z = np.meshgrid(v, v, v, indexing='ij')
     samples = np.vstack([x.ravel(), y.ravel(), z.ravel()]).T
-    gt_cells = gaussians.interpolator(x.ravel(), y.ravel(), z.ravel()).reshape(50, 50, 50)
-    flipped_tensor = np.flip(gt_cells, axis=1)
-    rotated_tensor = np.rot90(flipped_tensor, k=1, axes=(2, 0))
-    tensor_to_vtk(rotated_tensor, "test_gt.vtk")
-    gt = torch.tensor(rotated_tensor.copy()).cuda()
+    gt_cells = gaussians.interpolator(x.ravel(), y.ravel(), z.ravel()).reshape(100, 100, 100)
+    # flipped_tensor = np.flip(gt_cells, axis=1)
+    rotated_tensor = np.rot90(gt_cells, k=1, axes=(2, 0))
+    flipped_tensor = np.flip(rotated_tensor, axis=2)
+    tensor_to_vtk(flipped_tensor, "test_gt.vtk")
+    gt = torch.tensor(flipped_tensor.copy()).cuda()
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -98,7 +99,6 @@ def training(
             render_pkg["visibility_filter"],
             render_pkg["radii"],
         )
-
         l1_l = l1_loss(cells, gt)
 
         # ssim_value = piq.multi_scale_ssim(image.unsqueeze(0), gt_image.unsqueeze(0))
@@ -330,7 +330,7 @@ if __name__ == "__main__":
         "--test_iterations", nargs="+", type=int, default=[7_000, 30_000]
     )
     parser.add_argument(
-        "--save_iterations", nargs="+", type=int, default=[2_000, 4_000, 6_000, 8_000, 10_000]
+        "--save_iterations", nargs="+", type=int, default=[1, 100, 2_000, 4_000, 6_000, 8_000, 10_000]
     )
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--disable_viewer", action="store_true", default=True)

@@ -144,9 +144,15 @@ class GaussianModel:
         values_sampled = pcd.values.reshape(-1, 1)[indices]
         fused_point_cloud = torch.tensor(np.asarray(points_sampled)).float().cuda()
 
+        self.mins = [
+            0.0, 0.0, 0.0
+        ]
+        self.maxes = [
+            1.0, 1.0, 1.0
+        ]
+
         print(
-            f"Number of points at initialisation : {
-              fused_point_cloud.shape[0]}"
+            f"Number of points at initialisation : {fused_point_cloud.shape[0]}"
         )
 
         dist2 = torch.clamp_min(
@@ -268,8 +274,7 @@ class GaussianModel:
     def load_ply(self, path, pcd, normalize=False, use_train_test_exp=False):
         plydata = PlyData.read(path)
         print(
-            f"Number of points at initialisation : {
-              plydata.elements[0]["x"].shape[0]}"
+            f"Number of points at initialisation : {plydata.elements[0]['x'].shape[0]}"
         )
         xyz = np.stack(
             (

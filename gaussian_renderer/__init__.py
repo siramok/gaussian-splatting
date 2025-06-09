@@ -23,7 +23,7 @@ from scene.gaussian_model import GaussianModel
 def render(
     pc: GaussianModel,
     pipe,
-    cell_size=0.02,
+    cell_size=0.01,
     bg=-1.0,
     scaling_modifier=1.0,
 ):
