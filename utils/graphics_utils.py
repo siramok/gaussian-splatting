@@ -224,6 +224,36 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
             else: 
                 indices = np.linspace(0, 1, num_points)
                 step_size = 1.0 / num_steps
+                fc = step_size / 2
+                lc = (num_steps - 1) * step_size + fc
+                # for center in [0, 1]:
+                #     top = fc if center == 0 else lc 
+                #     arr = np.zeros(num_points, dtype=np.float32)
+                    
+                #     for i, x in enumerate(indices):
+                #         # Calculate shortest distance considering wrap-around
+                #         if wrap_around:
+                #             dist = min(abs(x - top), abs(x - (top - 1)), abs(x - (top + 1)))
+                #         else:
+                #             dist = abs(x - top)
+                #         # Make opacity 1 at center and 0 at furthest point from center
+                #         if (center == 0 and x >= fc) or (center == 1 and x <= lc):
+                #             arr[i] = 0
+                #         else:
+                #             arr[i] = max(0, (dist * 2 * slope * (num_steps / 2)))
+
+                    
+                #     opac_table = torch.tensor(arr, dtype=torch.float32).to("cuda")
+                    
+                #     # Compute derivatives
+                #     derivatives = np.zeros_like(arr, dtype=np.float32)
+                #     for i in range(num_points - 1):
+                #         derivatives[i] = (arr[i + 1] - arr[i]) * (num_points - 1)
+                        
+                #     opac_derivative = torch.tensor(derivatives, dtype=torch.float32).to("cuda")
+                    
+                #     opacs.append(opac_table)
+                #     opac_derivatives.append(opac_derivative)
                 
                 for step in range(num_steps):
                     center = step * step_size + step_size / 2
@@ -252,13 +282,14 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
             
         # Create figure
         plt.figure(figsize=(12, 8))
+        plt.rcParams['font.weight'] = 'bold'
         
         # Plot each opacity map
         x = np.linspace(0, 1, num_points)
         for i, opac in enumerate(opacs):
             # Convert from GPU tensor to numpy array
             opac_np = opac.cpu().numpy()
-            plt.plot(x, opac_np, label=f'Step {i+1}', alpha=0.7)
+            plt.plot(x, opac_np, label=f'Map {i+1}', alpha=0.7)
         
         # Add combined plot
         combined = np.zeros(num_points)
@@ -267,11 +298,11 @@ def create_opacitymaps(options=[], num_points=256, num_steps=5, triangular=True,
         plt.plot(x, combined, '--', label='Combined', color='black', linewidth=2)
         
         # Customize plot
-        plt.xlabel('Position')
-        plt.ylabel('Opacity')
-        plt.title(f'Opacity Maps (n_steps={num_steps})')
+        plt.xlabel('Value', fontsize=16, fontweight='bold')
+        plt.ylabel('Opacity', fontsize=16, fontweight='bold')
+        plt.title(f'Opacity Maps (n_steps={num_steps})', fontsize=16, fontweight='bold')
         plt.grid(True, alpha=0.3)
-        plt.legend()
+        plt.legend(loc='upper right')
         
         # Save plot
         plt.savefig("opac.png")
