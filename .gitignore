@@ -52,10 +52,14 @@ docs/_build/
 .vscode
 output
 build
-diff_rasterization/diff_rast.egg-info
-diff_rasterization/dist
 tensorboard_3d
 screenshots
 data
 vtu
 point_clouds
+3dgs
+raw
+diff_gaussian_rasterization/build/
+diff_gaussian_rasterization/diff_gaussian_rasterization.egg-info/
+diff_gaussian_rasterization/dist/
+diff_gaussian_rasterization/.vscode/
