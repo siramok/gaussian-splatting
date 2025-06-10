@@ -135,7 +135,7 @@ class GaussianModel:
         mesh: pv.PolyData,
     ):
         # Define the percentage of points to keep
-        fraction = 1.0
+        fraction = 0.1
 
         # Generate random indices to keep 10% of the points
         num_points = pcd.points.shape[0]
